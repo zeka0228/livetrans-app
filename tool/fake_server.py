@@ -6,15 +6,20 @@ API 계약 (앱↔서버) §1·§3 의 REST·WebSocket 동작을 흉내 낸다. 
 - stop 드레인 (S-1): control stop 을 받으면 0.5 s 뒤 마지막 segment.final → session.state=stopped → 서버가 close(1000).
 - S-2: 다섯 번째 final 은 text="" 로 보내 앱이 빈 문장을 기록에 넣지 않는지 확인.
 - GET /api/capture/targets (S-9 ①), E_CAPTURE_TARGET / E_SESSION_NOT_FOUND / E_NOT_IMPLEMENTED (Q-API-7).
+- GET /api/tts?text&lang (S-13): ko/en/ja 는 0.8 s 짜리 삐 소리 WAV, 그 외 404 E_TTS_NO_VOICE, 빈/500자 초과 400 E_TTS_TEXT.
 
 실행:  <서버 venv python> -I tool/fake_server.py [포트=8765]   (fastapi, uvicorn 필요)
 """
 
 import asyncio
+import io
+import math
+import struct
 import time
 import uuid
+import wave
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 app = FastAPI()
@@ -22,9 +27,12 @@ SAMPLE_RATE = 16000
 BYTES_PER_MS = SAMPLE_RATE * 2 / 1000
 
 TARGETS = [
-    {"id": "system", "kind": "system", "title": "PC 전체 소리", "process": None, "pid": None},
-    {"id": "pid:1234", "kind": "app", "title": "【LIVE】雑談配信 - YouTube - Chrome", "process": "chrome.exe", "pid": 1234},
-    {"id": "pid:5678", "kind": "app", "title": "Twitch - Firefox", "process": "firefox.exe", "pid": 5678},
+    {"id": "system", "kind": "system", "title": "PC 전체 소리 (기본 출력 장치)", "process": None, "pid": None, "windows": []},
+    {
+        "id": "pid:1234", "kind": "app", "title": "【LIVE】雑談配信 - YouTube - Chrome", "process": "chrome.exe", "pid": 1234,
+        "windows": ["【LIVE】雑談配信 - YouTube - Chrome", "livetrans-server - Chrome"],
+    },
+    {"id": "pid:5678", "kind": "app", "title": "Twitch - Firefox", "process": "firefox.exe", "pid": 5678, "windows": ["Twitch - Firefox"]},
 ]
 
 sessions: dict[str, dict] = {}
@@ -43,9 +51,41 @@ async def health():
     }
 
 
+TTS_LANGS = {"ko": 440.0, "en": 523.3, "ja": 659.3}
+
+
+def beep_wav(freq: float, seconds: float = 0.8, rate: int = 16000) -> bytes:
+    n = int(rate * seconds)
+    frames = b"".join(
+        struct.pack("<h", int(12000 * math.sin(2 * math.pi * freq * i / rate) * min(1.0, (n - i) / (rate * 0.1))))
+        for i in range(n)
+    )
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(frames)
+    return buf.getvalue()
+
+
+@app.get("/api/voices")
+async def voices():
+    return {"languages": sorted(TTS_LANGS), "voices": [{"voice_ref": "fake:beep", "languages": sorted(TTS_LANGS)}]}
+
+
+@app.get("/api/tts")
+async def tts(text: str = "", lang: str = "ko"):
+    if not text.strip() or len(text) > 500:
+        raise error(400, "E_TTS_TEXT", "텍스트가 비었거나 500자를 넘습니다")
+    if lang not in TTS_LANGS:
+        raise error(404, "E_TTS_NO_VOICE", f"{lang} 음성이 없습니다")
+    return Response(content=beep_wav(TTS_LANGS[lang]), media_type="audio/wav")
+
+
 @app.get("/api/capture/targets")
 async def capture_targets():
-    return {"targets": TARGETS, "app_capture_supported": True}
+    return {"targets": TARGETS, "capture_available": True, "app_capture_supported": True}
 
 
 @app.post("/api/sessions")

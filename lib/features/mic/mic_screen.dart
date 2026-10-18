@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/tts/tts_player.dart';
 import '../transcript/session_widgets.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_list.dart';
+import '../transcript/tts_hooks.dart';
 import 'mic_controller.dart';
 
 class MicScreen extends ConsumerWidget {
@@ -15,6 +17,11 @@ class MicScreen extends ConsumerWidget {
     final controller = ref.read(micControllerProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
     final locked = state.status == MicStatus.recording || state.isBusy;
+    final tts = TranscriptTts(ref, 'mic');
+    tts.listenErrors(context);
+    final ttsState = ref.watch(ttsControllerProvider);
+    final speakingSegId = tts.speakingSegId(ttsState);
+    final loadingSegId = tts.loadingSegId(ttsState);
 
     final (label, color) = switch (state.status) {
       MicStatus.idle => ('대기 중', scheme.outline),
@@ -63,6 +70,9 @@ class MicScreen extends ConsumerWidget {
             child: TranscriptList(
               entries: state.entries,
               emptyHint: '녹음을 시작하고 말하면 문장 단위로 쌓입니다',
+              onTapEntry: tts.toggle,
+              speakingSegId: speakingSegId,
+              loadingSegId: loadingSegId,
             ),
           ),
           _RecordDock(

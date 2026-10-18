@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/capture_target.dart';
+import '../../core/tts/tts_player.dart';
 import '../transcript/session_widgets.dart';
 import '../transcript/transcript_list.dart';
+import '../transcript/tts_hooks.dart';
 import 'broadcast_controller.dart';
 
 /// 방송 자막 (모드 B): PC 에서 재생 중인 창을 골라 그 소리를 서버가 캡처 → 실시간 자막.
@@ -29,6 +31,11 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     final controller = ref.read(broadcastControllerProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
     final locked = state.isRunning || state.isBusy;
+    final tts = TranscriptTts(ref, 'broadcast');
+    tts.listenErrors(context);
+    final ttsState = ref.watch(ttsControllerProvider);
+    final speakingSegId = tts.speakingSegId(ttsState);
+    final loadingSegId = tts.loadingSegId(ttsState);
 
     final (label, color) = switch (state.status) {
       BroadcastStatus.idle => ('대기 중', scheme.outline),
@@ -93,6 +100,9 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
             child: TranscriptList(
               entries: state.entries,
               emptyHint: '자막을 시작하면 방송의 문장이 여기에 쌓입니다',
+              onTapEntry: tts.toggle,
+              speakingSegId: speakingSegId,
+              loadingSegId: loadingSegId,
             ),
           ),
           _StartDock(
@@ -146,6 +156,10 @@ class _TargetPicker extends StatelessWidget {
       icon = Icons.error_outline_rounded;
       title = '대상 목록을 가져오지 못했어요';
       subtitle = state.targetsError!;
+    } else if (!state.captureAvailable) {
+      icon = Icons.build_circle_outlined;
+      title = '서버에 캡처 도구가 없어요';
+      subtitle = r'서버 PC 에서 scripts\build_wincap.bat 을 실행한 뒤 새로 고침하세요';
     } else if (loading && state.targets.isEmpty) {
       icon = Icons.hourglass_top_rounded;
       title = '대상 목록 불러오는 중…';
@@ -161,7 +175,9 @@ class _TargetPicker extends StatelessWidget {
       title = selected.title;
       subtitle = selected.isSystem
           ? 'PC 전체 소리'
-          : '${selected.process ?? '앱'} · 같은 프로그램의 다른 탭 소리도 함께 잡혀요';
+          : '${selected.process ?? '앱'}'
+              '${selected.windows.length > 1 ? ' · 창 ${selected.windows.length}개' : ''}'
+              ' · 같은 프로그램의 다른 탭 소리도 함께 잡혀요';
     }
 
     return Material(
@@ -171,7 +187,7 @@ class _TargetPicker extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         onTap: !enabled
             ? null
-            : state.targetsError != null
+            : (state.targetsError != null || !state.captureAvailable)
                 ? onRetry
                 : () => _openSheet(context),
         child: Padding(
@@ -297,10 +313,17 @@ class _TargetSheet extends StatelessWidget {
                     t.isSystem ? Icons.speaker_rounded : Icons.web_asset_rounded,
                   ),
                   title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  isThreeLine: !t.isSystem && t.windows.length > 1,
                   subtitle: Text(
                     t.isSystem
                         ? '모든 프로그램의 소리'
-                        : '${t.process ?? ''}${t.pid != null ? ' · pid ${t.pid}' : ''}',
+                        : [
+                            '${t.process ?? ''}${t.pid != null ? ' · pid ${t.pid}' : ''}',
+                            if (t.windows.length > 1)
+                              '창 ${t.windows.length}개: ${t.windows.skip(1).join(' / ')}',
+                          ].join('\n'),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   trailing: active
                       ? Icon(Icons.check_circle_rounded, color: scheme.primary)
