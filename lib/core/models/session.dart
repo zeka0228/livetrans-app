@@ -24,10 +24,25 @@ class SessionRequest {
   final int duckDb;
   final bool showOriginal;
 
+  /// 모드 C — 앱 마이크 PCM 을 WS 로 보낸다.
   factory SessionRequest.mic({required String srcLang, String tgtLang = 'ko'}) =>
       SessionRequest(
         mode: 'C',
         sourceType: 'mic_ws',
+        srcLang: srcLang,
+        tgtLang: tgtLang,
+      );
+
+  /// 모드 B — 서버가 PC 의 창·프로세스 소리를 캡처한다 (API 계약 S-9 ②). 앱은 오디오를 보내지 않는다.
+  factory SessionRequest.broadcast({
+    required String target,
+    required String srcLang,
+    String tgtLang = 'ko',
+  }) =>
+      SessionRequest(
+        mode: 'B',
+        sourceType: 'loopback',
+        sourceParams: {'target': target},
         srcLang: srcLang,
         tgtLang: tgtLang,
       );

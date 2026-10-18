@@ -4,13 +4,18 @@ import 'package:flutter/services.dart';
 import 'transcript_entry.dart';
 
 class TranscriptList extends StatelessWidget {
-  const TranscriptList({super.key, required this.entries});
+  const TranscriptList({
+    super.key,
+    required this.entries,
+    this.emptyHint = '시작하고 말하면 문장 단위로 쌓입니다',
+  });
 
   final List<TranscriptEntry> entries;
+  final String emptyHint;
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) return const _EmptyState();
+    if (entries.isEmpty) return _EmptyState(hint: emptyHint);
     return ListView.separated(
       reverse: true,
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
@@ -23,7 +28,9 @@ class TranscriptList extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({required this.hint});
+
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -55,10 +62,7 @@ class _EmptyState extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            '녹음을 시작하고 말하면 문장 단위로 쌓입니다',
-            style: TextStyle(fontSize: 12, color: scheme.outline),
-          ),
+          Text(hint, style: TextStyle(fontSize: 12, color: scheme.outline)),
         ],
       ),
     );

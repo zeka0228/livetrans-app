@@ -5,31 +5,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:record/record.dart';
 
 import '../../core/api/rest_client.dart';
-import '../../core/api/ws_client.dart';
 import '../../core/config/server_config.dart';
 import '../../core/models/events.dart';
 import '../../core/models/session.dart';
+import '../../core/session/stt_session.dart';
 import '../transcript/transcript_entry.dart';
+import '../transcript/transcript_session_state.dart';
 import 'pcm_framer.dart';
 
 enum MicStatus { idle, connecting, recording, stopping, error }
-
-const micLanguages = <String, String>{
-  'auto': '자동',
-  'ko': '한국어',
-  'en': '영어',
-  'ja': '일본어',
-};
 
 class MicState {
   const MicState({
     this.status = MicStatus.idle,
     this.language = 'auto',
     this.level = 0,
-    this.partial,
-    this.entries = const [],
+    this.transcript = const TranscriptSessionState(),
     this.sessionId,
-    this.serverState,
     this.errorMessage,
     this.bytesSent = 0,
   });
@@ -37,12 +29,15 @@ class MicState {
   final MicStatus status;
   final String language;
   final double level;
-  final TranscriptEntry? partial;
-  final List<TranscriptEntry> entries;
+  final TranscriptSessionState transcript;
   final String? sessionId;
-  final String? serverState;
   final String? errorMessage;
   final int bytesSent;
+
+  TranscriptEntry? get partial => transcript.partial;
+  List<TranscriptEntry> get entries => transcript.entries;
+  String? get serverState => transcript.serverState;
+  String? get warning => transcript.warning;
 
   bool get isBusy =>
       status == MicStatus.connecting || status == MicStatus.stopping;
@@ -51,13 +46,9 @@ class MicState {
     MicStatus? status,
     String? language,
     double? level,
-    TranscriptEntry? partial,
-    bool clearPartial = false,
-    List<TranscriptEntry>? entries,
+    TranscriptSessionState? transcript,
     String? sessionId,
     bool clearSession = false,
-    String? serverState,
-    bool clearServerState = false,
     String? errorMessage,
     bool clearError = false,
     int? bytesSent,
@@ -66,10 +57,8 @@ class MicState {
         status: status ?? this.status,
         language: language ?? this.language,
         level: level ?? this.level,
-        partial: clearPartial ? null : (partial ?? this.partial),
-        entries: entries ?? this.entries,
+        transcript: transcript ?? this.transcript,
         sessionId: clearSession ? null : (sessionId ?? this.sessionId),
-        serverState: clearServerState ? null : (serverState ?? this.serverState),
         errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
         bytesSent: bytesSent ?? this.bytesSent,
       );
@@ -80,7 +69,7 @@ class MicController extends Notifier<MicState> {
   static const _frameBytes = 640;
 
   AudioRecorder? _recorder;
-  WsClient? _ws;
+  SttSessionClient? _client;
   StreamSubscription<Uint8List>? _audioSub;
   StreamSubscription<ServerEvent>? _eventSub;
   final PcmFramer _framer = PcmFramer(frameBytes: _frameBytes);
@@ -88,17 +77,21 @@ class MicController extends Notifier<MicState> {
 
   @override
   MicState build() {
-    ref.onDispose(_teardown);
+    ref.onDispose(() => unawaited(_teardown()));
     return const MicState();
   }
 
   void setLanguage(String code) {
-    if (state.status != MicStatus.idle && state.status != MicStatus.error) return;
+    if (state.status != MicStatus.idle && state.status != MicStatus.error) {
+      return;
+    }
     state = state.copyWith(language: code);
   }
 
   void clearEntries() {
-    state = state.copyWith(entries: const [], clearPartial: true);
+    state = state.copyWith(
+      transcript: state.transcript.copyWith(entries: const [], clearPartial: true),
+    );
   }
 
   Future<void> start() async {
@@ -106,8 +99,8 @@ class MicController extends Notifier<MicState> {
     state = state.copyWith(
       status: MicStatus.connecting,
       clearError: true,
-      clearPartial: true,
       bytesSent: 0,
+      transcript: state.transcript.ended().copyWith(clearWarning: true),
     );
 
     final recorder = AudioRecorder();
@@ -116,21 +109,19 @@ class MicController extends Notifier<MicState> {
         throw StateError('마이크 권한이 없습니다');
       }
 
-      final rest = ref.read(restClientProvider);
-      final config = ref.read(serverConfigProvider);
-      final session = await rest.createSession(
+      final client = SttSessionClient(
+        rest: ref.read(restClientProvider),
+        config: ref.read(serverConfigProvider),
+      );
+      _client = client;
+      final session = await client.open(
         SessionRequest.mic(srcLang: state.language),
       );
-
-      final ws = WsClient(config.ws(session.wsUrl));
-      await ws.connect();
-      _ws = ws;
-      _eventSub = ws.events.listen(
+      _eventSub = client.events.listen(
         _onEvent,
         onError: (Object e) => _fail('서버 연결 오류: $e'),
         onDone: _onServerClosed,
       );
-      ws.sendText(ClientMessage.control('start'));
 
       final audio = await recorder.startStream(
         const RecordConfig(
@@ -140,7 +131,10 @@ class MicController extends Notifier<MicState> {
         ),
       );
       _recorder = recorder;
-      _audioSub = audio.listen(_onAudio, onError: (Object e) => _fail('녹음 오류: $e'));
+      _audioSub = audio.listen(
+        _onAudio,
+        onError: (Object e) => _fail('녹음 오류: $e'),
+      );
 
       state = state.copyWith(
         status: MicStatus.recording,
@@ -153,40 +147,34 @@ class MicController extends Notifier<MicState> {
     }
   }
 
+  /// 녹음을 멈추고 `control stop` → 서버가 마지막 발화를 끝내 `stopped` 를 줄 때까지 기다린다 (S-1).
   Future<void> stop() async {
     if (state.status != MicStatus.recording) return;
     state = state.copyWith(status: MicStatus.stopping);
-    final sessionId = state.sessionId;
     try {
       await _audioSub?.cancel();
       _audioSub = null;
       await _recorder?.stop();
       final tail = _framer.flush();
-      if (tail != null) _ws?.sendBinary(tail);
-      _ws?.sendText(ClientMessage.control('stop'));
+      if (tail != null) _client?.sendAudio(tail);
+      await _client?.stop();
       await _teardown();
-      if (sessionId != null) {
-        try {
-          await ref.read(restClientProvider).stopSession(sessionId);
-        } catch (_) {}
-      }
     } finally {
       state = state.copyWith(
         status: MicStatus.idle,
         level: 0,
         clearSession: true,
-        clearPartial: true,
-        clearServerState: true,
+        transcript: state.transcript.ended(),
       );
     }
   }
 
   void _onAudio(Uint8List chunk) {
-    final ws = _ws;
-    if (ws == null) return;
+    final client = _client;
+    if (client == null) return;
     var sent = 0;
     for (final frame in _framer.push(chunk)) {
-      ws.sendBinary(frame);
+      client.sendAudio(frame);
       sent += frame.length;
     }
     final now = DateTime.now();
@@ -202,62 +190,16 @@ class MicController extends Notifier<MicState> {
   }
 
   void _onEvent(ServerEvent event) {
-    switch (event.payload) {
-      case SessionStatePayload p:
-        state = state.copyWith(serverState: p.state);
-      case SegmentPartialPayload p:
-        state = state.copyWith(
-          partial: TranscriptEntry(
-            segId: p.segId,
-            tStartMs: p.tStartMs,
-            tEndMs: null,
-            text: p.text,
-            lang: p.lang,
-            langProb: null,
-            isFinal: false,
-          ),
-        );
-      case SegmentFinalPayload p:
-        final entry = TranscriptEntry(
-          segId: p.segId,
-          tStartMs: p.tStartMs,
-          tEndMs: p.tEndMs,
-          text: p.text,
-          lang: p.lang,
-          langProb: p.langProb,
-          isFinal: true,
-          sttMs: p.sttMs,
-          forcedCut: p.forcedCut,
-        );
-        final clearPartial = state.partial?.segId == p.segId;
-        state = state.copyWith(
-          entries: [...state.entries, entry],
-          clearPartial: clearPartial,
-        );
-      case TranslationFinalPayload p:
-        state = state.copyWith(
-          entries: [
-            for (final e in state.entries)
-              if (e.segId == p.segId) e.copyWith(translation: p.text) else e,
-          ],
-        );
-      case ErrorPayload p:
-        if (p.recoverable) {
-          state = state.copyWith(errorMessage: '${p.code}: ${p.message}');
-        } else {
-          _fail('${p.code}: ${p.message}');
-          unawaited(_abort());
-        }
-      case TtsReadyPayload():
-      case DeadlineEventPayload():
-      case MetricsPayload():
-      case UnknownPayload():
-        break;
+    state = state.copyWith(transcript: reduceTranscript(state.transcript, event));
+    if (event.payload case ErrorPayload(recoverable: false) && final p) {
+      _fail('${p.code}: ${p.message}');
+      unawaited(_abort());
     }
   }
 
   void _onServerClosed() {
-    if (state.status == MicStatus.recording) {
+    // 앱이 stop 을 보낸 뒤의 close 는 정상 (서버가 stopped 후 닫는다, S-1)
+    if (state.status == MicStatus.recording && _client?.isStopping != true) {
       _fail('서버가 연결을 끊었습니다');
       unawaited(_abort());
     }
@@ -276,8 +218,7 @@ class MicController extends Notifier<MicState> {
       errorMessage: message,
       level: 0,
       clearSession: true,
-      clearPartial: true,
-      clearServerState: true,
+      transcript: state.transcript.ended(),
     );
   }
 
@@ -289,14 +230,14 @@ class MicController extends Notifier<MicState> {
     final recorder = _recorder;
     _recorder = null;
     await recorder?.dispose();
-    final ws = _ws;
-    _ws = null;
-    await ws?.close();
+    final client = _client;
+    _client = null;
+    await client?.abort();
     _framer.flush();
   }
 
   static String _describe(Object e) {
-    if (e is ApiException) return '서버 응답 오류 (${e.statusCode ?? '-'}): ${e.message}';
+    if (e is ApiException) return '서버 응답 오류: $e';
     if (e is TimeoutException) return '서버 응답 시간 초과';
     if (e is StateError) return e.message;
     return '연결 실패: $e';

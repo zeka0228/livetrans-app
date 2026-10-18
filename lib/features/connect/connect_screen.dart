@@ -207,6 +207,15 @@ class _ErrorCard extends StatelessWidget {
 
   final String message;
 
+  /// 연결 거부·시간 초과는 서버가 모델 로딩 중(포트 미개방)일 때의 전형적 증상 (API 계약 Q-API-8).
+  static bool _looksLikeStarting(String m) {
+    final lower = m.toLowerCase();
+    return lower.contains('refused') ||
+        lower.contains('시간 초과') ||
+        lower.contains('timeout') ||
+        lower.contains('socketexception');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -238,6 +247,16 @@ class _ErrorCard extends StatelessWidget {
                       color: scheme.onErrorContainer,
                     ),
                   ),
+                  if (_looksLikeStarting(message)) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '서버를 방금 켰다면 모델을 로드하는 중일 수 있어요 (10~20초). 잠시 뒤 다시 확인하세요.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onErrorContainer.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
