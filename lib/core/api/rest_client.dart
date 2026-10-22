@@ -1,20 +1,42 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/server_config.dart';
+import '../models/capture_target.dart';
 import '../models/session.dart';
 
+/// REST 오류. 서버가 `{"detail": {"code", "message"}}` 형식으로 주면 [code]·[message]에 풀어 담는다 (API 계약 Q-API-7).
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;
+  final String? code;
+
+  factory ApiException.fromResponse(http.Response res) {
+    String message = res.body;
+    String? code;
+    try {
+      final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+      final detail = decoded is Map ? decoded['detail'] : null;
+      if (detail is Map) {
+        code = detail['code']?.toString();
+        message = detail['message']?.toString() ?? message;
+      } else if (detail != null) {
+        message = detail.toString();
+      }
+    } catch (_) {}
+    return ApiException(message, statusCode: res.statusCode, code: code);
+  }
 
   @override
-  String toString() =>
-      statusCode == null ? message : 'HTTP $statusCode: $message';
+  String toString() {
+    final prefix = code ?? (statusCode == null ? null : 'HTTP $statusCode');
+    return prefix == null ? message : '$prefix: $message';
+  }
 }
 
 class RestClient {
@@ -22,15 +44,25 @@ class RestClient {
     this.config, {
     http.Client? client,
     this.timeout = const Duration(seconds: 5),
+    this.ttsTimeout = const Duration(seconds: 20),
   }) : _client = client ?? http.Client();
 
   final ServerConfig config;
   final http.Client _client;
   final Duration timeout;
 
+  /// 음성 합성은 모델에 따라 몇 초 걸릴 수 있어 따로 둔다.
+  final Duration ttsTimeout;
+
   Future<HealthInfo> health() async {
     final json = await _get('/api/health');
     return HealthInfo.fromJson(json);
+  }
+
+  /// 캡처 가능한 창·프로세스 목록 (API 계약 S-9 ①).
+  Future<CaptureTargets> captureTargets() async {
+    final json = await _get('/api/capture/targets');
+    return CaptureTargets.fromJson(json);
   }
 
   Future<SessionInfo> createSession(SessionRequest request) async {
@@ -41,6 +73,21 @@ class RestClient {
   Future<void> stopSession(String sessionId) async {
     await _post('/api/sessions/$sessionId/stop', const {});
   }
+
+  /// `GET /api/tts?text=&lang=` → WAV 바이트 (API 계약 S-13).
+  Future<Uint8List> ttsWav({required String text, required String lang}) async {
+    final res = await _client.get(ttsUri(text: text, lang: lang)).timeout(ttsTimeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException.fromResponse(res);
+    }
+    return res.bodyBytes;
+  }
+
+  Uri ttsUri({required String text, required String lang}) =>
+      config.rest('/api/tts').replace(queryParameters: {'text': text, 'lang': lang});
+
+  /// `GET /api/voices` → 서버가 합성할 수 있는 언어 목록. 형식이 확정되기 전이라 원본 JSON 을 그대로 준다.
+  Future<Map<String, dynamic>> voices() => _get('/api/voices');
 
   Future<Map<String, dynamic>> _get(String path) async {
     final res = await _client.get(config.rest(path)).timeout(timeout);
@@ -63,7 +110,7 @@ class RestClient {
 
   Map<String, dynamic> _decode(http.Response res) {
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(res.body, statusCode: res.statusCode);
+      throw ApiException.fromResponse(res);
     }
     if (res.bodyBytes.isEmpty) return const {};
     final decoded = jsonDecode(utf8.decode(res.bodyBytes));

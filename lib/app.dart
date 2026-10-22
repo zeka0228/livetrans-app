@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'features/broadcast/broadcast_screen.dart';
 import 'features/connect/connect_screen.dart';
 import 'features/mic/mic_screen.dart';
 
@@ -103,7 +104,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _pages = [ConnectScreen(), MicScreen()];
+  static const _pages = [ConnectScreen(), MicScreen(), BroadcastScreen()];
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +123,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.mic_none_outlined),
             selectedIcon: Icon(Icons.mic),
             label: '마이크',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.live_tv_outlined),
+            selectedIcon: Icon(Icons.live_tv),
+            label: '방송',
           ),
         ],
       ),
