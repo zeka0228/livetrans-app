@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/server_config.dart';
+import '../models/audio_route.dart';
 import '../models/capture_target.dart';
 import '../models/session.dart';
 
@@ -63,6 +64,36 @@ class RestClient {
   Future<CaptureTargets> captureTargets() async {
     final json = await _get('/api/capture/targets');
     return CaptureTargets.fromJson(json);
+  }
+
+  /// 출력 장치 목록 — 모드 A 격리 장치 선택용 (명세 v0.5 §6.1). 서버 미구현이면 404.
+  Future<AudioDevices> audioDevices() async {
+    final json = await _get('/api/audio/devices');
+    return AudioDevices.fromJson(json);
+  }
+
+  /// 소리 격리 점검 (명세 §4.9 `check()`). 통과해야 모드 A 를 시작할 수 있다.
+  Future<RouteStatus> routeCheck({
+    required String router,
+    required String isolationDevice,
+  }) async {
+    final json = await _post('/api/audio/route/check', {
+      'router': router,
+      'isolation_device': isolationDevice,
+    });
+    return RouteStatus.fromJson(json);
+  }
+
+  /// 지연 보정 — 권장 D (명세 §3.4). 실시간 속도로 샘플을 돌리므로 오래 걸릴 수 있다.
+  Future<CalibrateResult> calibrate({Duration timeout = const Duration(seconds: 90)}) async {
+    final res = await _client
+        .post(
+          config.rest('/api/calibrate'),
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode(const {}),
+        )
+        .timeout(timeout);
+    return CalibrateResult.fromJson(_decode(res));
   }
 
   Future<SessionInfo> createSession(SessionRequest request) async {

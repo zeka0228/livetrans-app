@@ -63,6 +63,9 @@ class SttSessionClient {
 
   void sendAudio(Uint8List bytes) => _ws?.sendBinary(bytes);
 
+  /// `config.update` 같은 텍스트 메시지 (§6.2). 연결이 없으면 조용히 무시한다.
+  void sendText(String text) => _ws?.sendText(text);
+
   /// `control stop` 을 보내고 서버가 남은 발화를 끝내 `stopped` 를 줄 때까지 기다린 뒤 닫는다.
   Future<void> stop() async {
     final ws = _ws;

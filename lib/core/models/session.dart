@@ -11,6 +11,9 @@ class SessionRequest {
     this.voiceRef,
     this.duckDb = -12,
     this.showOriginal = true,
+    this.showSpeaker,
+    this.route,
+    this.audio,
   });
 
   final String mode;
@@ -23,6 +26,15 @@ class SessionRequest {
   final String? voiceRef;
   final int duckDb;
   final bool showOriginal;
+
+  /// 명세 v0.4 `display.show_speaker`. null 이면 보내지 않는다 (모드 B·C 요청은 예전 그대로).
+  final bool? showSpeaker;
+
+  /// 명세 v0.5 `route` — 모드 A 원본 소리 격리 (`{"router", "isolation_device"}`). null 이면 보내지 않는다.
+  final Map<String, dynamic>? route;
+
+  /// 명세 v0.4 `audio` — `{"enhance", "diarize", "game_dialogue"}`. null 이면 보내지 않는다.
+  final Map<String, dynamic>? audio;
 
   /// 모드 C — 앱 마이크 PCM 을 WS 로 보낸다.
   factory SessionRequest.mic({required String srcLang, String tgtLang = 'ko'}) =>
@@ -47,18 +59,57 @@ class SessionRequest {
         tgtLang: tgtLang,
       );
 
+  /// 모드 A — 동기 시청 (명세 §6.1 v0.5). 서버가 캡처·지연·합성을 모두 하고 앱은 재생한다.
+  ///
+  /// [sourceType] 은 `obs_stream`(OBS → SRT) 또는 `loopback`(격리 장치 소리만, 영상 없음).
+  /// [delayS] 가 null 이면 서버가 calibrate 결과(권장 D)를 쓴다.
+  factory SessionRequest.watch({
+    required String sourceType,
+    required Map<String, dynamic> sourceParams,
+    required String srcLang,
+    required String tgtLang,
+    int? delayS,
+    required bool ttsEnabled,
+    bool showOriginal = true,
+    bool showSpeaker = true,
+    String? router,
+    String? isolationDevice,
+    bool enhance = true,
+    bool diarize = true,
+  }) =>
+      SessionRequest(
+        mode: 'A',
+        sourceType: sourceType,
+        sourceParams: sourceParams,
+        srcLang: srcLang,
+        tgtLang: tgtLang,
+        delayS: delayS,
+        ttsEnabled: ttsEnabled,
+        showOriginal: showOriginal,
+        showSpeaker: showSpeaker,
+        route: router == null
+            ? null
+            : {'router': router, 'isolation_device': isolationDevice},
+        audio: {'enhance': enhance, 'diarize': diarize, 'game_dialogue': 'keep'},
+      );
+
   Map<String, dynamic> toJson() => {
         'mode': mode,
         'source': {'type': sourceType, 'params': sourceParams},
         'src_lang': srcLang,
         'tgt_lang': tgtLang,
         'delay_s': delayS,
+        if (route != null) 'route': route,
+        if (audio != null) 'audio': audio,
         'tts': {
           'enabled': ttsEnabled,
           'voice_ref': voiceRef,
           'duck_db': duckDb,
         },
-        'display': {'show_original': showOriginal},
+        'display': {
+          'show_original': showOriginal,
+          if (showSpeaker != null) 'show_speaker': showSpeaker,
+        },
       };
 }
 
