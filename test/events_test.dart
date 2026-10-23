@@ -26,6 +26,23 @@ void main() {
       expect(p.sttMs, 830);
     });
 
+    test('S-17: segment.final 의 speaker 를 읽고, 없거나 비면 null 이다', () {
+      final withSpeaker = ServerEvent.fromJson({
+        'v': 1, 'type': 'segment.final', 'seq': 1, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 4, 't_start_ms': 0, 't_end_ms': 900, 'text': 'hello', 'lang': 'en',
+          'lang_prob': 0.99, 'words': [], 'forced_cut': false, 'stt_ms': 200, 'speaker': 'S1', 'diar_ms': 40},
+      }).payload as SegmentFinalPayload;
+      expect(withSpeaker.speaker, 'S1');
+      expect(withSpeaker.words, isEmpty);
+
+      final without = ServerEvent.fromJson({
+        'v': 1, 'type': 'segment.final', 'seq': 2, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 5, 't_start_ms': 0, 't_end_ms': 900, 'text': 'x', 'lang': 'en',
+          'lang_prob': 0.9, 'words': [], 'forced_cut': false, 'stt_ms': 1, 'speaker': ''},
+      }).payload as SegmentFinalPayload;
+      expect(without.speaker, isNull);
+    });
+
     test('segment.partial을 파싱한다', () {
       final ev = ServerEvent.parse(
         '{"v":1,"type":"segment.partial","seq":1,"session_id":"s","ts_wall_ms":0,'

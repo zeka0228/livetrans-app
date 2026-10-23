@@ -34,8 +34,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
     final tts = TranscriptTts(ref, 'broadcast');
     tts.listenErrors(context);
     final ttsState = ref.watch(ttsControllerProvider);
-    final speakingSegId = tts.speakingSegId(ttsState);
-    final loadingSegId = tts.loadingSegId(ttsState);
+    final speakingKey = tts.speakingEntryKey(ttsState);
+    final loadingKey = tts.loadingEntryKey(ttsState);
 
     final (label, color) = switch (state.status) {
       BroadcastStatus.idle => ('대기 중', scheme.outline),
@@ -101,8 +101,8 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
               entries: state.entries,
               emptyHint: '자막을 시작하면 방송의 문장이 여기에 쌓입니다',
               onTapEntry: tts.toggle,
-              speakingSegId: speakingSegId,
-              loadingSegId: loadingSegId,
+              speakingEntryKey: speakingKey,
+              loadingEntryKey: loadingKey,
             ),
           ),
           _StartDock(

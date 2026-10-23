@@ -10,19 +10,19 @@ class TranscriptList extends StatelessWidget {
     required this.entries,
     this.emptyHint = '시작하고 말하면 문장 단위로 쌓입니다',
     this.onTapEntry,
-    this.speakingSegId,
-    this.loadingSegId,
+    this.speakingEntryKey,
+    this.loadingEntryKey,
   });
 
   final List<TranscriptEntry> entries;
   final String emptyHint;
   final ValueChanged<TranscriptEntry>? onTapEntry;
 
-  /// 지금 재생 중인 항목의 seg_id (없으면 null).
-  final int? speakingSegId;
+  /// 지금 재생 중인 항목의 `TranscriptEntry.key` (없으면 null).
+  final String? speakingEntryKey;
 
-  /// 서버 합성을 기다리는 항목의 seg_id.
-  final int? loadingSegId;
+  /// 서버 합성을 기다리는 항목의 `TranscriptEntry.key`.
+  final String? loadingEntryKey;
 
   @override
   Widget build(BuildContext context) {
@@ -36,8 +36,8 @@ class TranscriptList extends StatelessWidget {
         final entry = entries[entries.length - 1 - i];
         return TranscriptTile(
           entry: entry,
-          speaking: speakingSegId != null && entry.segId == speakingSegId,
-          loading: loadingSegId != null && entry.segId == loadingSegId,
+          speaking: speakingEntryKey != null && entry.key == speakingEntryKey,
+          loading: loadingEntryKey != null && entry.key == loadingEntryKey,
           onTap: onTapEntry == null ? null : () => onTapEntry!(entry),
         );
       },
@@ -151,6 +151,10 @@ class TranscriptTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
+                    if (entry.speaker != null) ...[
+                      _SpeakerBadge(speaker: entry.speaker!),
+                      const SizedBox(width: 6),
+                    ],
                     _LangBadge(code: entry.lang, prob: entry.langProb),
                     const SizedBox(width: 8),
                     Text(
@@ -255,6 +259,43 @@ class TranscriptTile extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 화자 배지 (`S0` → `화자 1`). 화자마다 색을 달리해 같은 문장 안의 두 화자를 구분한다.
+class _SpeakerBadge extends StatelessWidget {
+  const _SpeakerBadge({required this.speaker});
+
+  final String speaker;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final n = int.tryParse(speaker.replaceFirst(RegExp('^S'), '')) ?? 0;
+    final (bg, fg) = switch (n % 4) {
+      0 => (scheme.primaryContainer, scheme.onPrimaryContainer),
+      1 => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
+      2 => (scheme.errorContainer, scheme.onErrorContainer),
+      _ => (scheme.surfaceContainerHighest, scheme.onSurface),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.person_rounded, size: 12, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            TranscriptEntry.speakerLabel(speaker),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
+          ),
+        ],
       ),
     );
   }

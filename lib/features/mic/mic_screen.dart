@@ -20,8 +20,8 @@ class MicScreen extends ConsumerWidget {
     final tts = TranscriptTts(ref, 'mic');
     tts.listenErrors(context);
     final ttsState = ref.watch(ttsControllerProvider);
-    final speakingSegId = tts.speakingSegId(ttsState);
-    final loadingSegId = tts.loadingSegId(ttsState);
+    final speakingKey = tts.speakingEntryKey(ttsState);
+    final loadingKey = tts.loadingEntryKey(ttsState);
 
     final (label, color) = switch (state.status) {
       MicStatus.idle => ('대기 중', scheme.outline),
@@ -71,8 +71,8 @@ class MicScreen extends ConsumerWidget {
               entries: state.entries,
               emptyHint: '녹음을 시작하고 말하면 문장 단위로 쌓입니다',
               onTapEntry: tts.toggle,
-              speakingSegId: speakingSegId,
-              loadingSegId: loadingSegId,
+              speakingEntryKey: speakingKey,
+              loadingEntryKey: loadingKey,
             ),
           ),
           _RecordDock(
