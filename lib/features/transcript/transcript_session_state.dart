@@ -6,7 +6,9 @@ import 'transcript_entry.dart';
 /// 규칙 (API 계약 §1.3, S-2, S-4):
 /// - `segment.partial` 은 seg_id 와 무관하게 "지금 듣는 중" 칸 하나에 덮어쓴다 (버려진 발화의 id 재사용 대응).
 /// - `segment.final` 은 기록에 추가하고 같은 seg_id 의 partial 을 지운다. **text 가 비면 추가하지 않는다** (S-2).
-/// - `translation.final` 은 같은 seg_id 기록에 번역문을 붙인다.
+///   화자 분할이 켜지면 같은 seg_id 로 화자별 final 이 하나씩 온다 → 기록 키는 (seg_id, speaker) (S-17).
+///   같은 키의 final 이 다시 오면 덮어쓴다 (서버 재전송 대비, 기록이 두 줄 되지 않게).
+/// - `translation.final` 은 같은 (seg_id, speaker) 기록에 번역문을 붙인다.
 /// - `error(recoverable=true)` 는 경고 문구만. 치명적 error 는 컨트롤러가 따로 처리한다.
 class TranscriptSessionState {
   const TranscriptSessionState({
@@ -78,16 +80,26 @@ TranscriptSessionState reduceTranscript(
         isFinal: true,
         sttMs: p.sttMs,
         forcedCut: p.forcedCut,
+        speaker: p.speaker,
       );
+      final i = s.entries.indexWhere((e) => e.key == entry.key);
       return s.copyWith(
-        entries: [...s.entries, entry],
+        entries: i < 0
+            ? [...s.entries, entry]
+            : [
+                for (var j = 0; j < s.entries.length; j++)
+                  if (j == i)
+                    entry.copyWith(translation: s.entries[j].translation)
+                  else
+                    s.entries[j],
+              ],
         clearPartial: clearPartial,
       );
     case TranslationFinalPayload p:
       return s.copyWith(
         entries: [
           for (final e in s.entries)
-            if (e.segId == p.segId) e.copyWith(translation: p.text) else e,
+            if (e.sameAs(p.segId, p.speaker)) e.copyWith(translation: p.text) else e,
         ],
       );
     case ErrorPayload p when p.recoverable:

@@ -119,6 +119,7 @@ class SegmentFinalPayload extends ServerPayload {
     required this.words,
     required this.forcedCut,
     required this.sttMs,
+    this.speaker,
   });
 
   final int segId;
@@ -130,6 +131,10 @@ class SegmentFinalPayload extends ServerPayload {
   final List<WordTiming> words;
   final bool forcedCut;
   final int sttMs;
+
+  /// 명세 v0.4 §6.2 — 화자 분할이 켜지면 `"S0"` 같은 세션 내 익명 ID. 없으면 null.
+  /// 한 구간에 화자가 둘이면 같은 seg_id 로 final 이 화자마다 1개씩 온다 → 키는 (seg_id, speaker).
+  final String? speaker;
 
   factory SegmentFinalPayload.fromJson(Map<String, dynamic> p) =>
       SegmentFinalPayload(
@@ -145,6 +150,7 @@ class SegmentFinalPayload extends ServerPayload {
             const [],
         forcedCut: p['forced_cut'] == true,
         sttMs: asInt(p['stt_ms']),
+        speaker: asStringOrNull(p['speaker']),
       );
 }
 
@@ -157,6 +163,7 @@ class TranslationFinalPayload extends ServerPayload {
     required this.engine,
     required this.fallback,
     required this.mtMs,
+    this.speaker,
   });
 
   final int segId;
@@ -166,6 +173,7 @@ class TranslationFinalPayload extends ServerPayload {
   final String engine;
   final bool fallback;
   final int mtMs;
+  final String? speaker;
 
   factory TranslationFinalPayload.fromJson(Map<String, dynamic> p) =>
       TranslationFinalPayload(
@@ -176,6 +184,7 @@ class TranslationFinalPayload extends ServerPayload {
         engine: asString(p['engine']),
         fallback: p['fallback'] == true,
         mtMs: asInt(p['mt_ms']),
+        speaker: asStringOrNull(p['speaker']),
       );
 }
 
@@ -308,3 +317,9 @@ double asDouble(Object? v, {double fallback = 0}) {
 }
 
 String asString(Object? v) => v?.toString() ?? '';
+
+String? asStringOrNull(Object? v) {
+  if (v == null) return null;
+  final s = v.toString();
+  return s.isEmpty ? null : s;
+}
