@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/server_config.dart';
 import '../../core/tts/tts_player.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_list.dart';
@@ -161,7 +162,9 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
         fit: StackFit.expand,
         children: [
           PlayerSurface(
-            hlsUrl: state.hlsUrl,
+            hlsUrl: state.hlsUrl == null
+                ? null
+                : ref.read(serverConfigProvider).resolve(state.hlsUrl!),
             audioOnly: !state.hasVideo,
             playing: state.phase == WatchPhase.playing,
             muted: state.muted,
@@ -436,7 +439,7 @@ class _CueBox extends StatelessWidget {
                 children: [
                   if (speaker != null)
                     TextSpan(
-                      text: '$speaker  ',
+                      text: '${TranscriptEntry.speakerLabel(speaker)}  ',
                       style: TextStyle(
                         color: _speakerColor(speaker),
                         fontWeight: FontWeight.w800,

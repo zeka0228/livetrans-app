@@ -14,6 +14,9 @@ API 계약 (앱↔서버) §1·§3 의 REST·WebSocket 동작을 흉내 낸다. 
   - WS: starting → (start) → calibrating → buffering{delay_s, play_start_wall_ms} → playing. t_cap 은 start 기준 벽시계.
     3 s 마다 segment.final(speaker S0/S1 번갈아) + 0.8 s 뒤 translation.final + tts.ready, 2 s 마다 metrics,
     5번째마다 deadline.event L1, 9번째마다 L3. 격리 장치가 `device:lost` 면 재생 15 s 뒤 E_ROUTE_LOST → stopped → close.
+  - **HLS (Q-API-14)**: `obs_stream` 세션은 `hls_url=/hls/<sid>/master.m3u8` 을 주고, 그 아래 경로는 환경 변수
+    `FAKE_HLS_DIR` 폴더의 파일을 그대로 서빙한다 (CORS `*`). 폴더가 없으면 404. 테스트 스트림 만들기(ffmpeg):
+      ffmpeg -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i sine=frequency=440:sample_rate=48000 -i subs.vtt -t 30         -map 0:v -map 1:a -map 2:s -c:v libx264 -g 30 -c:a aac -c:s webvtt -f hls -hls_time 1 -hls_playlist_type event         -hls_segment_type fmp4 -master_pl_name master.m3u8 -var_stream_map "v:0,a:0,s:0,sgroup:subs" stream_%v.m3u8
 
 실행:  <서버 venv python> -I tool/fake_server.py [포트=8765]   (fastapi, uvicorn 필요)
 """
@@ -21,12 +24,14 @@ API 계약 (앱↔서버) §1·§3 의 REST·WebSocket 동작을 흉내 낸다. 
 import asyncio
 import io
 import math
+import os
 import struct
 import time
 import uuid
 import wave
 
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketState
 
 app = FastAPI()
@@ -211,6 +216,24 @@ async def create_session(body: dict):
         "hls_url": f"/hls/{sid}/master.m3u8" if mode == "A" and sess["has_video"] else None,
         "ws_url": f"/ws/sessions/{sid}",
     }
+
+
+HLS_DIR = os.environ.get("FAKE_HLS_DIR")
+HLS_TYPES = {".m3u8": "application/vnd.apple.mpegurl", ".m4s": "video/iso.segment", ".mp4": "video/mp4", ".vtt": "text/vtt"}
+
+
+@app.get("/hls/{sid}/{path:path}")
+async def hls_file(sid: str, path: str):
+    """모드 A 출력 흉내: FAKE_HLS_DIR 의 파일을 세션 경로 아래로 서빙한다 (실서버는 세션 임시 폴더, 명세 §4.6)."""
+    if not HLS_DIR:
+        raise error(404, "E_HLS_NOT_CONFIGURED", "FAKE_HLS_DIR 환경 변수가 없습니다 (docstring 의 ffmpeg 명령으로 만들어 지정)")
+    base = os.path.realpath(HLS_DIR)
+    full = os.path.realpath(os.path.join(base, path))
+    if not full.startswith(base) or not os.path.isfile(full):
+        raise error(404, "E_HLS_NOT_FOUND", f"없는 파일: {path}")
+    ext = os.path.splitext(full)[1]
+    return FileResponse(full, media_type=HLS_TYPES.get(ext, "application/octet-stream"),
+                        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"})
 
 
 @app.post("/api/sessions/{sid}/stop")
