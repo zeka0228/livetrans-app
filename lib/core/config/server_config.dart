@@ -1,15 +1,16 @@
-import 'dart:io';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 서버 주소 설정. Android 에뮬레이터에서는 호스트 PC가 10.0.2.2다.
+/// 서버 주소 설정. Android 에뮬레이터에서는 호스트 PC가 10.0.2.2, 웹·데스크톱은 127.0.0.1.
 class ServerConfig {
   const ServerConfig({required this.baseUrl});
 
   final String baseUrl;
 
   static String defaultBaseUrl() =>
-      Platform.isAndroid ? 'http://10.0.2.2:8765' : 'http://127.0.0.1:8765';
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? 'http://10.0.2.2:8765'
+          : 'http://127.0.0.1:8765';
 
   Uri rest(String path) => Uri.parse(join(baseUrl, path));
 

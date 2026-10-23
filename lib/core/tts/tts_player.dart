@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../api/rest_client.dart';
+import 'tts_store.dart';
 
 /// `GET /api/tts` 요청 키. 같은 문장·언어는 같은 파일로 캐시된다.
 String ttsCacheName(String text, String lang) =>
@@ -38,9 +37,10 @@ class TtsState {
 
 /// 서버 TTS(`GET /api/tts?text&lang` → WAV)를 받아 재생한다 (API 계약 S-13, D-018).
 /// - 탭 = 재생, 재생 중 같은 항목 탭 = 정지, 다른 항목 탭 = 이전 정지 후 새로 재생.
-/// - WAV 는 임시 폴더에 캐시해 같은 문장은 다시 받지 않는다.
+/// - WAV 는 [TtsStore] 에 캐시해 같은 문장은 다시 받지 않는다 (파일 또는 웹 메모리).
 class TtsController extends Notifier<TtsState> {
   AudioPlayer? _player;
+  final TtsStore _store = createTtsStore();
   StreamSubscription<void>? _completeSub;
   int _generation = 0;
 
@@ -81,10 +81,10 @@ class TtsController extends Notifier<TtsState> {
     state = TtsState(loadingKey: key, errorSeq: state.errorSeq);
 
     try {
-      final file = await _cachedWav(text, lang);
+      final source = await _cachedWav(text, lang);
       if (gen != _generation) return;
       state = TtsState(speakingKey: key, errorSeq: state.errorSeq);
-      await player.play(DeviceFileSource(file.path));
+      await player.play(source);
     } catch (e) {
       if (gen != _generation) return;
       state = TtsState(error: _describe(e), errorSeq: state.errorSeq + 1);
@@ -97,13 +97,12 @@ class TtsController extends Notifier<TtsState> {
     state = TtsState(errorSeq: state.errorSeq);
   }
 
-  Future<File> _cachedWav(String text, String lang) async {
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}${Platform.pathSeparator}${ttsCacheName(text, lang)}');
-    if (await file.exists() && await file.length() > 44) return file;
+  Future<Source> _cachedWav(String text, String lang) async {
+    final name = ttsCacheName(text, lang);
+    final hit = await _store.cached(name);
+    if (hit != null) return hit;
     final bytes = await ref.read(restClientProvider).ttsWav(text: text, lang: lang);
-    await file.writeAsBytes(bytes, flush: true);
-    return file;
+    return _store.put(name, bytes);
   }
 
   static String _describe(Object e) {
