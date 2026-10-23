@@ -126,6 +126,9 @@ class TranscriptTile extends StatelessWidget {
         ? start
         : '$start – ${TranscriptEntry.formatMs(entry.tEndMs!)}';
 
+    // 화자 레인: 왼쪽 색 띠로 누가 말했는지 한눈에 (S-19).
+    final laneBar = entry.speaker == null ? null : speakerLaneColors(scheme, entry.speaker!).bar;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       decoration: BoxDecoration(
@@ -135,6 +138,12 @@ class TranscriptTile extends StatelessWidget {
           width: 1.5,
         ),
       ),
+      foregroundDecoration: laneBar == null
+          ? null
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border(left: BorderSide(color: laneBar, width: 4)),
+            ),
       child: Material(
         color: speaking || loading
             ? scheme.primaryContainer.withValues(alpha: 0.35)
@@ -264,7 +273,18 @@ class TranscriptTile extends StatelessWidget {
   }
 }
 
-/// 화자 배지 (`S0` → `화자 1`). 화자마다 색을 달리해 같은 문장 안의 두 화자를 구분한다.
+/// 화자(레인) 색 — `S0`, `S1`… 순서대로 4색 순환. 배지·레인 바·"듣는 중" 버블이 같이 쓴다 (S-19 레인 UI).
+({Color bg, Color fg, Color bar}) speakerLaneColors(ColorScheme scheme, String speaker) {
+  final n = int.tryParse(speaker.replaceFirst(RegExp('^S'), '')) ?? 0;
+  return switch (n % 4) {
+    0 => (bg: scheme.primaryContainer, fg: scheme.onPrimaryContainer, bar: scheme.primary),
+    1 => (bg: scheme.tertiaryContainer, fg: scheme.onTertiaryContainer, bar: scheme.tertiary),
+    2 => (bg: scheme.errorContainer, fg: scheme.onErrorContainer, bar: scheme.error),
+    _ => (bg: scheme.surfaceContainerHighest, fg: scheme.onSurface, bar: scheme.outline),
+  };
+}
+
+/// 화자 배지 (`S0` → `화자 1`). 화자마다 색을 달리해 두 화자를 구분한다.
 class _SpeakerBadge extends StatelessWidget {
   const _SpeakerBadge({required this.speaker});
 
@@ -273,13 +293,7 @@ class _SpeakerBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final n = int.tryParse(speaker.replaceFirst(RegExp('^S'), '')) ?? 0;
-    final (bg, fg) = switch (n % 4) {
-      0 => (scheme.primaryContainer, scheme.onPrimaryContainer),
-      1 => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
-      2 => (scheme.errorContainer, scheme.onErrorContainer),
-      _ => (scheme.surfaceContainerHighest, scheme.onSurface),
-    };
+    final (:bg, :fg, bar: _) = speakerLaneColors(scheme, speaker);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

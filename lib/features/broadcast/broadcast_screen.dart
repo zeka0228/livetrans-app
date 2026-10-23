@@ -95,7 +95,7 @@ class _BroadcastScreenState extends ConsumerState<BroadcastScreen> {
             errorMessage: state.errorMessage,
             warning: state.warning,
           ),
-          PartialBubble(text: state.partial?.text),
+          PartialBubble(partials: state.partials),
           Expanded(
             child: TranscriptList(
               entries: state.entries,

@@ -78,6 +78,7 @@ class SegmentPartialPayload extends ServerPayload {
     required this.tStartMs,
     required this.text,
     required this.lang,
+    this.speaker,
   });
 
   final int segId;
@@ -85,12 +86,16 @@ class SegmentPartialPayload extends ServerPayload {
   final String text;
   final String lang;
 
+  /// 화자 레인 모드(S-19 ②)에서는 partial 에도 화자가 붙는다. 없으면 null.
+  final String? speaker;
+
   factory SegmentPartialPayload.fromJson(Map<String, dynamic> p) =>
       SegmentPartialPayload(
         segId: asInt(p['seg_id']),
         tStartMs: asInt(p['t_start_ms']),
         text: asString(p['text']),
         lang: asString(p['lang']),
+        speaker: asStringOrNull(p['speaker']),
       );
 }
 

@@ -43,6 +43,14 @@ void main() {
       expect(without.speaker, isNull);
     });
 
+    test('S-19: segment.partial 의 speaker 를 읽는다', () {
+      final p = ServerEvent.fromJson({
+        'v': 1, 'type': 'segment.partial', 'seq': 3, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 12, 't_start_ms': 500, 'text': 'hel', 'lang': 'en', 'speaker': 'S1'},
+      }).payload as SegmentPartialPayload;
+      expect(p.speaker, 'S1');
+    });
+
     test('segment.partial을 파싱한다', () {
       final ev = ServerEvent.parse(
         '{"v":1,"type":"segment.partial","seq":1,"session_id":"s","ts_wall_ms":0,'

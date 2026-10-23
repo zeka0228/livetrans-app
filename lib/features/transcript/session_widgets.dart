@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'transcript_entry.dart';
+import 'transcript_list.dart';
+
 /// STT 원어 선택지. `auto` 는 서버 자동 감지 (API 계약 Q-API-1).
 const sttLanguages = <String, String>{
   'auto': '자동',
@@ -262,11 +265,11 @@ class _StatusDotState extends State<StatusDot>
   }
 }
 
-/// "듣는 중" 중간 결과 버블. [text] 가 null 이면 높이 0 으로 접힌다.
+/// "듣는 중" 중간 결과 버블. 화자 레인(S-19)마다 하나씩, [partials] 가 비면 높이 0 으로 접힌다.
 class PartialBubble extends StatelessWidget {
-  const PartialBubble({super.key, required this.text});
+  const PartialBubble({super.key, required this.partials});
 
-  final String? text;
+  final List<TranscriptEntry> partials;
 
   @override
   Widget build(BuildContext context) {
@@ -275,55 +278,71 @@ class PartialBubble extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
       alignment: Alignment.topCenter,
-      child: text == null
+      child: partials.isEmpty
           ? const SizedBox(width: double.infinity)
           : Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: scheme.primary.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.graphic_eq_rounded,
-                          size: 14,
-                          color: scheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '듣는 중',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.primary,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      text!,
-                      style: TextStyle(
-                        fontSize: 16,
-                        height: 1.35,
-                        color: scheme.onPrimaryContainer,
-                      ),
-                    ),
+              child: Column(
+                children: [
+                  for (final p in partials) ...[
+                    _PartialTile(entry: p, scheme: scheme),
+                    if (p != partials.last) const SizedBox(height: 6),
                   ],
-                ),
+                ],
               ),
             ),
+    );
+  }
+}
+
+class _PartialTile extends StatelessWidget {
+  const _PartialTile({required this.entry, required this.scheme});
+
+  final TranscriptEntry entry;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final speaker = entry.speaker;
+    final lane = speaker == null ? null : speakerLaneColors(scheme, speaker);
+    final accent = lane?.bar ?? scheme.primary;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: (lane?.bg ?? scheme.primaryContainer).withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.graphic_eq_rounded, size: 14, color: accent),
+              const SizedBox(width: 6),
+              Text(
+                speaker == null ? '듣는 중' : '${TranscriptEntry.speakerLabel(speaker)} 듣는 중',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: accent,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            entry.text,
+            style: TextStyle(
+              fontSize: 16,
+              height: 1.35,
+              color: lane?.fg ?? scheme.onPrimaryContainer,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

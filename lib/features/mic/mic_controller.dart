@@ -34,7 +34,7 @@ class MicState {
   final String? errorMessage;
   final int bytesSent;
 
-  TranscriptEntry? get partial => transcript.partial;
+  List<TranscriptEntry> get partials => transcript.partials;
   List<TranscriptEntry> get entries => transcript.entries;
   String? get serverState => transcript.serverState;
   String? get warning => transcript.warning;
@@ -90,7 +90,7 @@ class MicController extends Notifier<MicState> {
 
   void clearEntries() {
     state = state.copyWith(
-      transcript: state.transcript.copyWith(entries: const [], clearPartial: true),
+      transcript: state.transcript.copyWith(entries: const [], partials: const []),
     );
   }
 
