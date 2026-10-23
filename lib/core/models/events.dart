@@ -244,6 +244,7 @@ class MetricsPayload extends ServerPayload {
     required this.missRate,
     required this.queueDepth,
     required this.gpuMemUsedMb,
+    this.gpuUtilStream,
   });
 
   final Map<String, int> p50Ms;
@@ -252,12 +253,18 @@ class MetricsPayload extends ServerPayload {
   final int queueDepth;
   final int gpuMemUsedMb;
 
+  /// 명세 v0.4 — 분리·화자 분할 같은 상시 단계의 평균 GPU 점유율 (0~1). 없으면 null.
+  final double? gpuUtilStream;
+
   factory MetricsPayload.fromJson(Map<String, dynamic> p) => MetricsPayload(
         p50Ms: _intMap(p['p50_ms']),
         p99Ms: _intMap(p['p99_ms']),
         missRate: asDouble(p['miss_rate']),
         queueDepth: asInt(p['queue_depth']),
         gpuMemUsedMb: asInt(p['gpu_mem_used_mb']),
+        gpuUtilStream: p['gpu_util_stream'] == null
+            ? null
+            : asDouble(p['gpu_util_stream']),
       );
 
   static Map<String, int> _intMap(Object? v) {

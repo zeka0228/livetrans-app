@@ -12,6 +12,7 @@ class TranscriptEntry {
     this.forcedCut = false,
     this.translation,
     this.speaker,
+    this.late = false,
   });
 
   final int segId;
@@ -43,6 +44,9 @@ class TranscriptEntry {
     return n == null ? speaker : '화자 ${n + 1}';
   }
 
+  /// 모드 A 에서 데드라인을 놓쳐 재생에 못 실린 문장 (`deadline.event` L3). 기록에는 "지연" 표시로 남긴다.
+  final bool late;
+
   TranscriptEntry copyWith({
     int? tEndMs,
     String? text,
@@ -53,6 +57,7 @@ class TranscriptEntry {
     bool? forcedCut,
     String? translation,
     String? speaker,
+    bool? late,
   }) =>
       TranscriptEntry(
         segId: segId,
@@ -66,6 +71,7 @@ class TranscriptEntry {
         forcedCut: forcedCut ?? this.forcedCut,
         translation: translation ?? this.translation,
         speaker: speaker ?? this.speaker,
+        late: late ?? this.late,
       );
 
   static String formatMs(int ms) {

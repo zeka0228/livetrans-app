@@ -102,6 +102,14 @@ TranscriptSessionState reduceTranscript(
             if (e.sameAs(p.segId, p.speaker)) e.copyWith(translation: p.text) else e,
         ],
       );
+    case DeadlineEventPayload p when p.level == 'L3':
+      // 모드 A: 발화 재생이 이미 끝나 출력에서 빠진 문장 → 기록에 "지연" 표시 (명세 §3.5).
+      return s.copyWith(
+        entries: [
+          for (final e in s.entries)
+            if (e.segId == p.segId) e.copyWith(late: true) else e,
+        ],
+      );
     case ErrorPayload p when p.recoverable:
       return s.copyWith(warning: '${p.code}: ${p.message}');
     case ErrorPayload():

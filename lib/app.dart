@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'features/broadcast/broadcast_screen.dart';
 import 'features/connect/connect_screen.dart';
 import 'features/mic/mic_screen.dart';
+import 'features/watch/watch_setup_screen.dart';
 
 /// 앱 공통 색: 파랑 계열 (과제 규칙과 통일).
 const kSeedColor = Color(0xFF1F6FEB);
@@ -104,7 +105,12 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _pages = [ConnectScreen(), MicScreen(), BroadcastScreen()];
+  static const _pages = [
+    ConnectScreen(),
+    MicScreen(),
+    BroadcastScreen(),
+    WatchSetupScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +134,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.live_tv_outlined),
             selectedIcon: Icon(Icons.live_tv),
             label: '방송',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.slow_motion_video_outlined),
+            selectedIcon: Icon(Icons.slow_motion_video_rounded),
+            label: '시청',
           ),
         ],
       ),
