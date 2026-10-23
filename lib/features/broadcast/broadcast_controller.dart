@@ -45,7 +45,7 @@ class BroadcastState {
   /// 실행 중 1 s 마다 증가 — 경과 시간 표시를 다시 그리기 위한 값.
   final int tick;
 
-  TranscriptEntry? get partial => transcript.partial;
+  List<TranscriptEntry> get partials => transcript.partials;
   List<TranscriptEntry> get entries => transcript.entries;
   String? get serverState => transcript.serverState;
   String? get warning => transcript.warning;
@@ -154,7 +154,7 @@ class BroadcastController extends Notifier<BroadcastState> {
 
   void clearEntries() {
     state = state.copyWith(
-      transcript: state.transcript.copyWith(entries: const [], clearPartial: true),
+      transcript: state.transcript.copyWith(entries: const [], partials: const []),
     );
   }
 
