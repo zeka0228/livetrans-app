@@ -64,8 +64,9 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
   void initState() {
     super.initState();
     _viewType = 'livetrans-hls-${_nextViewId++}';
+    // autoplay 는 끈다 — 재생 시점은 [widget.playing] 이 정한다 (모드 A 는 buffering 동안 멈춰 있어야 함).
     _video = web.document.createElement('video') as web.HTMLVideoElement
-      ..autoplay = true
+      ..autoplay = false
       ..playsInline = true
       ..controls = false
       ..muted = widget.muted
