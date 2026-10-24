@@ -171,6 +171,8 @@ class TranslationFinalPayload extends ServerPayload {
     required this.fallback,
     required this.mtMs,
     this.speaker,
+    this.confidence,
+    this.uncertain = false,
   });
 
   final int segId;
@@ -182,6 +184,13 @@ class TranslationFinalPayload extends ServerPayload {
   final int mtMs;
   final String? speaker;
 
+  /// API 계약 S-30 — 번역 모델이 문맥으로 고른 읽기의 확신도(0~1). 서버가 재채점을 돌린 발화에만 온다.
+  /// 모델 자기보고라 보정되지 않았다(거의 0.95~1.0) — 표시용으로만 쓴다.
+  final double? confidence;
+
+  /// S-30 — 확신도가 서버 기준(`mt.confidence_low` 0.5) 아래. 앱은 이 줄을 흐리게 보여 준다.
+  final bool uncertain;
+
   factory TranslationFinalPayload.fromJson(Map<String, dynamic> p) =>
       TranslationFinalPayload(
         segId: asInt(p['seg_id']),
@@ -192,6 +201,8 @@ class TranslationFinalPayload extends ServerPayload {
         fallback: p['fallback'] == true,
         mtMs: asInt(p['mt_ms']),
         speaker: asStringOrNull(p['speaker']),
+        confidence: p['confidence'] == null ? null : asDouble(p['confidence']).clamp(0.0, 1.0),
+        uncertain: p['uncertain'] == true,
       );
 }
 
@@ -221,7 +232,8 @@ class RevisionPayload extends ServerPayload {
   final String text;
   final String? prevText;
 
-  /// 지금은 `context`(앞뒤 문맥) 뿐.
+  /// `context`(S-28 2차 패스: 뒤 문맥) 또는 `hypothesis`(S-30: 다른 STT 엔진 후보 중 문맥상 맞는 읽기를 고름,
+  /// `translation.final` 직후에 온다). 앱 처리는 같다.
   final String? reason;
   final String? speaker;
 

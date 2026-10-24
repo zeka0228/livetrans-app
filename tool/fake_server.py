@@ -360,6 +360,17 @@ async def run_mode_bc(ws: WebSocket, sid: str, sess: dict):
             "seg_id": seg_id, "t_start_ms": seg_start_ms, "t_end_ms": t_cap(), "text": text, "lang": lang,
             "lang_prob": 0.99, "words": [], "forced_cut": False, "stt_ms": 12,
         })
+        # 모드 B(ja) 는 번역도 흉내: 네 문장마다 하나는 확신도 낮음(uncertain) + 후보 선택으로 원문 교체 (S-30).
+        if text and mode == "B":
+            uncertain = finals % 4 == 2
+            await send("translation.final", {
+                "seg_id": seg_id, "text": f"{text} → 번역", "src_lang": lang, "tgt_lang": "ko", "engine": "fake",
+                "fallback": False, "mt_ms": 5, "confidence": 0.42 if uncertain else 0.97,
+                **({"uncertain": True} if uncertain else {}),
+            })
+            if uncertain:
+                await send("segment.update", {"seg_id": seg_id, "text": f"{text} (후보 선택)", "prev_text": text,
+                                              "reason": "hypothesis"})
         # 세 문장마다 하나는 1.5 s 뒤 원문을 고쳐 보낸다 (segment.update).
         if text and finals % 3 == 0:
             pending_revise.append((time.monotonic() + 1.5, seg_id, f"{text} [교정됨]"))
@@ -499,10 +510,19 @@ async def run_mode_a(ws: WebSocket, sid: str, sess: dict):
         for item in list(pending_tr):
             if t >= item[0]:
                 pending_tr.remove(item)
+                # 네 문장마다 하나는 확신도 낮음(uncertain) → 바로 뒤 segment.update(reason=hypothesis) 로 원문 교체 (S-30).
+                uncertain = item[1] % 4 == 2
                 await send("translation.final", {
                     "seg_id": item[1], "text": item[2], "src_lang": "ja", "tgt_lang": "ko", "engine": "fake",
                     "fallback": False, "mt_ms": 650, **({"speaker": item[3]} if item[3] else {}),
+                    "confidence": 0.42 if uncertain else 0.97, **({"uncertain": True} if uncertain else {}),
                 })
+                if uncertain:
+                    ja_prev = next((ja for ja, ko in JA_LINES if ko == item[2]), item[2])
+                    await send("segment.update", {
+                        "seg_id": item[1], "text": f"{ja_prev} (후보 선택)", "prev_text": ja_prev, "reason": "hypothesis",
+                        **({"speaker": item[3]} if item[3] else {}),
+                    })
                 if sess.get("tts"):
                     await send("tts.ready", {"seg_id": item[1], "duration_ms": 1800, "rate": 1.0,
                                              "voice_ref": "system:auto", "tts_ms": 90})

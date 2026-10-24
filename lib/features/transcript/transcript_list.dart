@@ -190,10 +190,30 @@ class TranscriptTile extends StatelessWidget {
                         color: scheme.tertiary,
                       ),
                     ],
+                    if (entry.uncertain) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: entry.confidenceLabel == null
+                            ? '번역 모델이 문맥으로 고른 읽기의 확신도가 낮아요'
+                            : '번역 모델이 문맥으로 고른 읽기의 확신도가 낮아요 (${entry.confidenceLabel}, 모델 자기보고)',
+                        child: Row(
+                          key: const Key('uncertain-badge'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.help_outline_rounded, size: 12, color: scheme.error),
+                            const SizedBox(width: 2),
+                            Text(
+                              entry.confidenceLabel == null ? '불확실' : '불확실 ${entry.confidenceLabel}',
+                              style: TextStyle(fontSize: 11, color: scheme.error),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (entry.revised) ...[
                       const SizedBox(width: 8),
                       Tooltip(
-                        message: '뒤 문맥으로 서버가 고친 줄 (2차 패스)',
+                        message: '문맥으로 서버가 고친 줄 (후보 선택·2차 패스)',
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -244,19 +264,31 @@ class TranscriptTile extends StatelessWidget {
                 ),
                 if (entry.translation != null) ...[
                   const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      entry.translation!,
-                      style: TextStyle(
-                        fontSize: 15,
-                        height: 1.4,
-                        color: scheme.onPrimaryContainer,
+                  Tooltip(
+                    message: entry.confidenceLabel == null
+                        ? ''
+                        : '번역 확신도 ${entry.confidenceLabel} (모델 자기보고, 보정 안 됨)',
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      decoration: BoxDecoration(
+                        // 불확실한 번역(S-30)은 배경을 빼고 점선 테두리 + 기울임으로 "가정" 느낌을 준다.
+                        color: entry.uncertain ? null : scheme.primaryContainer.withValues(alpha: 0.45),
+                        border: entry.uncertain
+                            ? Border.all(color: scheme.outlineVariant)
+                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        entry.uncertain ? '${entry.translation!} ?' : entry.translation!,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.4,
+                          fontStyle: entry.uncertain ? FontStyle.italic : null,
+                          color: entry.uncertain
+                              ? scheme.onSurfaceVariant.withValues(alpha: 0.75)
+                              : scheme.onPrimaryContainer,
+                        ),
                       ),
                     ),
                   ),
