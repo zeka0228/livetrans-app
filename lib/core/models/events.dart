@@ -201,6 +201,7 @@ class TtsReadyPayload extends ServerPayload {
     required this.voiceRef,
     required this.ttsMs,
     this.audioUrl,
+    this.speaker,
   });
 
   final int segId;
@@ -208,7 +209,12 @@ class TtsReadyPayload extends ServerPayload {
   final double rate;
   final String voiceRef;
   final int ttsMs;
+
+  /// 모드 A 서버 TTS 는 HLS 오디오에 믹스되므로 null (S-21 ④). 모드 B 는 앱이 재생할 URL.
   final String? audioUrl;
+
+  /// 화자 레인 (S-21 ④ `speaker?`). 없으면 null.
+  final String? speaker;
 
   factory TtsReadyPayload.fromJson(Map<String, dynamic> p) => TtsReadyPayload(
         segId: asInt(p['seg_id']),
@@ -217,6 +223,7 @@ class TtsReadyPayload extends ServerPayload {
         voiceRef: asString(p['voice_ref']),
         ttsMs: asInt(p['tts_ms']),
         audioUrl: p['audio_url'] as String?,
+        speaker: asStringOrNull(p['speaker']),
       );
 }
 

@@ -17,6 +17,8 @@ extension type _Hls._(JSObject _) implements JSObject {
   external void attachMedia(web.HTMLVideoElement element);
   external void destroy();
   external void on(String event, JSFunction callback);
+  external void startLoad();
+  external void recoverMediaError();
   external JSArray<JSObject> get subtitleTracks;
   external set subtitleTrack(int index);
   external set subtitleDisplay(bool value);
@@ -59,6 +61,13 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
   _Hls? _hls;
   HlsVideoStatus _status = HlsVideoStatus.loading;
   int _subtitleTracks = 0;
+
+  /// 치명적 네트워크 오류(매니페스트 404 등) 자동 재시도 횟수. 서버는 `playing` 을 플레이리스트
+  /// 생성 뒤에 보내지만(S-21 ②) 프록시·타이밍 차이로 첫 요청이 실패할 수 있어 몇 번은 조용히 다시 연다.
+  int _networkRetries = 0;
+  static const _maxNetworkRetries = 3;
+  static const _networkRetryDelay = Duration(seconds: 2);
+  Timer? _retryTimer;
 
   @override
   void initState() {
@@ -147,6 +156,7 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
   }
 
   void _onManifestParsed(JSAny? event, JSAny? data) {
+    _networkRetries = 0;
     _subtitleTracks = _hls?.subtitleTracks.length ?? 0;
     _emit(HlsVideoStatus.ready);
     if (widget.playing) _play();
@@ -166,6 +176,26 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
     final type = d.getProperty<JSString?>('type'.toJS)?.toDart ?? '';
     final details = d.getProperty<JSString?>('details'.toJS)?.toDart ?? '';
     if (!fatal) return; // 비치명적(세그먼트 1개 실패 등)은 hls.js 가 스스로 복구한다.
+    final hls = _hls;
+    if (hls != null && type == 'networkError' && _networkRetries < _maxNetworkRetries) {
+      _networkRetries++;
+      _emit(
+        HlsVideoStatus.loading,
+        detail: '다시 연결 중 ($_networkRetries/$_maxNetworkRetries) · $details',
+      );
+      _retryTimer?.cancel();
+      _retryTimer = Timer(_networkRetryDelay, () {
+        if (mounted && _hls == hls) hls.startLoad();
+      });
+      return;
+    }
+    if (hls != null && type == 'mediaError' && _networkRetries < _maxNetworkRetries) {
+      // 디코더 오류는 hls.js 가 권하는 recoverMediaError 로 한 번 더.
+      _networkRetries++;
+      _emit(HlsVideoStatus.buffering, detail: '디코더 복구 중 · $details');
+      hls.recoverMediaError();
+      return;
+    }
     _emit(HlsVideoStatus.error, detail: '$type/$details');
   }
 
@@ -185,8 +215,10 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
   void didUpdateWidget(HlsVideoImpl old) {
     super.didUpdateWidget(old);
     if (old.url != widget.url) {
+      _retryTimer?.cancel();
       _hls?.destroy();
       _hls = null;
+      _networkRetries = 0;
       _load();
       return;
     }
@@ -206,6 +238,7 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
 
   @override
   void dispose() {
+    _retryTimer?.cancel();
     _hls?.destroy();
     _hls = null;
     _video
