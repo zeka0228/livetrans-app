@@ -92,7 +92,9 @@ class _PlayerSurfaceState extends State<PlayerSurface> {
         HlsVideoView(
           key: ValueKey('${widget.hlsUrl}#$_attempt'),
           url: widget.hlsUrl!,
-          playing: widget.playing,
+          // 한 번 열린 스트림은 멈추지 않는다: 입력이 끝나도(E_CAPTURE_LOST·stopped) HLS 에는 D 초만큼
+          // 지연된 내용이 남아 있으므로 ENDLIST 까지 재생하게 둔다 (실서버 E2E 2026-10-24 에서 마지막 4 s 가 잘렸음).
+          playing: true,
           muted: widget.muted,
           volume: widget.volume,
           onState: (s) => setState(() => _video = s),
