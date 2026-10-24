@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../config/server_config.dart';
 import '../models/audio_route.dart';
 import '../models/capture_target.dart';
+import '../models/engines.dart';
 import '../models/session.dart';
 
 /// REST 오류. 서버가 `{"detail": {"code", "message"}}` 형식으로 주면 [code]·[message]에 풀어 담는다 (API 계약 Q-API-7).
@@ -46,6 +47,7 @@ class RestClient {
     http.Client? client,
     this.timeout = const Duration(seconds: 5),
     this.ttsTimeout = const Duration(seconds: 20),
+    this.modelSwapTimeout = const Duration(seconds: 120),
   }) : _client = client ?? http.Client();
 
   final ServerConfig config;
@@ -54,6 +56,9 @@ class RestClient {
 
   /// 음성 합성은 모델에 따라 몇 초 걸릴 수 있어 따로 둔다.
   final Duration ttsTimeout;
+
+  /// 번역 모델을 바꾼 세션 생성은 Ollama 가 모델을 교체해 올리는 동안(수 초~수십 초) 기다린다 (API 계약 S-26).
+  final Duration modelSwapTimeout;
 
   Future<HealthInfo> health() async {
     final json = await _get('/api/health');
@@ -97,8 +102,18 @@ class RestClient {
   }
 
   Future<SessionInfo> createSession(SessionRequest request) async {
-    final json = await _post('/api/sessions', request.toJson());
+    final json = await _post(
+      '/api/sessions',
+      request.toJson(),
+      timeout: request.expectsModelSwap ? modelSwapTimeout : null,
+    );
     return SessionInfo.fromJson(json);
+  }
+
+  /// `GET /api/engines` → 세션에서 고를 수 있는 STT 엔진·번역 모델 (API 계약 S-26). 구 서버는 404.
+  Future<EngineCatalog> engines() async {
+    final json = await _get('/api/engines');
+    return EngineCatalog.fromJson(json);
   }
 
   Future<void> stopSession(String sessionId) async {
@@ -127,15 +142,16 @@ class RestClient {
 
   Future<Map<String, dynamic>> _post(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    Duration? timeout,
+  }) async {
     final res = await _client
         .post(
           config.rest(path),
           headers: const {'content-type': 'application/json'},
           body: jsonEncode(body),
         )
-        .timeout(timeout);
+        .timeout(timeout ?? this.timeout);
     return _decode(res);
   }
 

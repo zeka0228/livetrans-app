@@ -14,6 +14,8 @@ class SessionRequest {
     this.showSpeaker,
     this.route,
     this.audio,
+    this.sttEngine,
+    this.mtModel,
   });
 
   final String mode;
@@ -36,13 +38,29 @@ class SessionRequest {
   /// 명세 v0.4 `audio` — `{"enhance", "diarize", "game_dialogue"}`. null 이면 보내지 않는다.
   final Map<String, dynamic>? audio;
 
+  /// API 계약 S-26 `stt.engine` — `GET /api/engines` 의 `stt.engines[].name`. null 이면 보내지 않는다 (= 서버 `auto`).
+  final String? sttEngine;
+
+  /// API 계약 S-26 `mt.model` — Ollama 모델 이름. null 이면 보내지 않는다 (= 서버 기본 모델).
+  final String? mtModel;
+
+  /// 번역 모델을 바꾸면 Ollama 가 모델을 교체해 올리므로 세션 생성이 오래 걸린다 (S-26).
+  bool get expectsModelSwap => mtModel != null;
+
   /// 모드 C — 앱 마이크 PCM 을 WS 로 보낸다.
-  factory SessionRequest.mic({required String srcLang, String tgtLang = 'ko'}) =>
+  factory SessionRequest.mic({
+    required String srcLang,
+    String tgtLang = 'ko',
+    String? sttEngine,
+    String? mtModel,
+  }) =>
       SessionRequest(
         mode: 'C',
         sourceType: 'mic_ws',
         srcLang: srcLang,
         tgtLang: tgtLang,
+        sttEngine: sttEngine,
+        mtModel: mtModel,
       );
 
   /// 모드 B — 서버가 PC 의 창·프로세스 소리를 캡처한다 (API 계약 S-9 ②). 앱은 오디오를 보내지 않는다.
@@ -50,6 +68,8 @@ class SessionRequest {
     required String target,
     required String srcLang,
     String tgtLang = 'ko',
+    String? sttEngine,
+    String? mtModel,
   }) =>
       SessionRequest(
         mode: 'B',
@@ -57,6 +77,8 @@ class SessionRequest {
         sourceParams: {'target': target},
         srcLang: srcLang,
         tgtLang: tgtLang,
+        sttEngine: sttEngine,
+        mtModel: mtModel,
       );
 
   /// 모드 A — 동기 시청 (명세 §6.1 v0.5). 서버가 캡처·지연·합성을 모두 하고 앱은 재생한다.
@@ -76,6 +98,8 @@ class SessionRequest {
     String? isolationDevice,
     bool enhance = true,
     bool diarize = true,
+    String? sttEngine,
+    String? mtModel,
   }) =>
       SessionRequest(
         mode: 'A',
@@ -91,6 +115,8 @@ class SessionRequest {
             ? null
             : {'router': router, 'isolation_device': isolationDevice},
         audio: {'enhance': enhance, 'diarize': diarize, 'game_dialogue': 'keep'},
+        sttEngine: sttEngine,
+        mtModel: mtModel,
       );
 
   Map<String, dynamic> toJson() => {
@@ -101,6 +127,8 @@ class SessionRequest {
         'delay_s': delayS,
         if (route != null) 'route': route,
         if (audio != null) 'audio': audio,
+        if (sttEngine != null) 'stt': {'engine': sttEngine},
+        if (mtModel != null) 'mt': {'model': mtModel},
         'tts': {
           'enabled': ttsEnabled,
           'voice_ref': voiceRef,

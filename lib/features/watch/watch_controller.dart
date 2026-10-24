@@ -8,6 +8,7 @@ import '../../core/config/server_config.dart';
 import '../../core/models/audio_route.dart';
 import '../../core/models/events.dart';
 import '../../core/session/stt_session.dart';
+import '../engines/engine_controller.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_session_state.dart';
 import 'watch_settings.dart';
@@ -435,7 +436,11 @@ class WatchController extends Notifier<WatchState> {
         config: ref.read(serverConfigProvider),
       );
       _client = client;
-      final info = await client.open(state.settings.toRequest());
+      final engines = ref.read(engineControllerProvider).selection;
+      final info = await client.open(state.settings.toRequest(
+        sttEngine: engines.sttEngineForRequest,
+        mtModel: engines.mtModel,
+      ));
       _sub = client.events.listen(
         _onEvent,
         onError: (Object e) => _fail(WatchError(code: 'E_CONNECTION_LOST', message: '$e')),
@@ -556,6 +561,8 @@ class WatchController extends Notifier<WatchState> {
       if (_isUnsupported(e)) {
         return WatchError(code: 'E_NOT_IMPLEMENTED', message: e.message);
       }
+      final engine = describeEngineError(e);
+      if (engine != null) return WatchError(code: e.code!, message: engine);
       return WatchError(code: e.code ?? 'HTTP ${e.statusCode}', message: e.message);
     }
     if (e is TimeoutException) {

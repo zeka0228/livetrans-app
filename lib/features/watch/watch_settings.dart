@@ -50,7 +50,8 @@ class WatchSettings {
 
   int? get requestedDelayS => autoDelay ? null : manualDelayS;
 
-  SessionRequest toRequest() {
+  /// [sttEngine]·[mtModel] 은 엔진 선택(API 계약 S-26). null 이면 서버 기본.
+  SessionRequest toRequest({String? sttEngine, String? mtModel}) {
     final (type, params) = switch (sourceKind) {
       WatchSourceKind.obs => ('obs_stream', <String, dynamic>{'url': obsUrl}),
       WatchSourceKind.audioOnly => (
@@ -73,6 +74,8 @@ class WatchSettings {
       isolationDevice: isolationDeviceId,
       enhance: enhance,
       diarize: diarize,
+      sttEngine: sttEngine,
+      mtModel: mtModel,
     );
   }
 

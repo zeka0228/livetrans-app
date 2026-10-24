@@ -8,6 +8,7 @@ import '../../core/models/capture_target.dart';
 import '../../core/models/events.dart';
 import '../../core/models/session.dart';
 import '../../core/session/stt_session.dart';
+import '../engines/engine_controller.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_session_state.dart';
 
@@ -179,8 +180,14 @@ class BroadcastController extends Notifier<BroadcastState> {
         config: ref.read(serverConfigProvider),
       );
       _client = client;
+      final engines = ref.read(engineControllerProvider).selection;
       final session = await client.open(
-        SessionRequest.broadcast(target: target, srcLang: state.language),
+        SessionRequest.broadcast(
+          target: target,
+          srcLang: state.language,
+          sttEngine: engines.sttEngineForRequest,
+          mtModel: engines.mtModel,
+        ),
       );
       _eventSub = client.events.listen(
         _onEvent,
@@ -262,6 +269,8 @@ class BroadcastController extends Notifier<BroadcastState> {
 
   static String _describe(Object e) {
     if (e is ApiException) {
+      final engine = describeEngineError(e);
+      if (engine != null) return engine;
       if (e.code == 'E_CAPTURE_TARGET') {
         return '대상을 찾을 수 없습니다. 목록을 새로 고친 뒤 다시 고르세요';
       }
