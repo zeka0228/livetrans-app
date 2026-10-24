@@ -143,6 +143,33 @@ void main() {
     });
   });
 
+  group('문맥 재채점 (API 계약 S-30)', () {
+    test('translation.final 의 confidence·uncertain 을 읽는다, 없으면 null/false', () {
+      ServerEvent ev(Map<String, dynamic> extra) => ServerEvent.fromJson({
+            'v': 1, 'type': 'translation.final', 'seq': 1, 'session_id': 's', 'ts_wall_ms': 0,
+            'payload': {'seg_id': 1, 'text': 't', 'src_lang': 'en', 'tgt_lang': 'ko', 'engine': 'ollama_llm',
+              'fallback': false, 'mt_ms': 200, ...extra},
+          });
+      final low = ev({'confidence': 0.42, 'uncertain': true}).payload as TranslationFinalPayload;
+      expect(low.confidence, 0.42);
+      expect(low.uncertain, isTrue);
+      final high = ev({'confidence': 0.97}).payload as TranslationFinalPayload;
+      expect(high.confidence, 0.97);
+      expect(high.uncertain, isFalse);
+      final none = ev({}).payload as TranslationFinalPayload;
+      expect(none.confidence, isNull);
+      expect(none.uncertain, isFalse);
+    });
+
+    test('segment.update reason=hypothesis 도 RevisionPayload 로 읽힌다', () {
+      final e = ServerEvent.fromJson({
+        'v': 1, 'type': 'segment.update', 'seq': 2, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 1, 'text': 'game', 'prev_text': 'gain', 'reason': 'hypothesis'},
+      });
+      expect((e.payload as RevisionPayload).reason, 'hypothesis');
+    });
+  });
+
   group('2차 패스 갱신 이벤트 (API 계약 S-28)', () {
     test('translation.update → RevisionPayload(translation)', () {
       final e = ServerEvent.fromJson({

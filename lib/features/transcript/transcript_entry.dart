@@ -14,6 +14,8 @@ class TranscriptEntry {
     this.speaker,
     this.late = false,
     this.revised = false,
+    this.confidence,
+    this.uncertain = false,
   });
 
   final int segId;
@@ -51,6 +53,15 @@ class TranscriptEntry {
   /// 서버 2차 패스(S-28 `segment.update`/`translation.update`)로 원문 또는 번역이 고쳐진 줄. 목록에 "교정" 배지.
   final bool revised;
 
+  /// 번역 모델이 문맥으로 고른 읽기의 확신도 0~1 (S-30 `translation.final.confidence`). 없으면 null.
+  final double? confidence;
+
+  /// 확신도가 낮은 줄 (S-30 `uncertain`). 목록·자막에서 흐리게/기울임으로 보여 준다.
+  final bool uncertain;
+
+  /// 확신도 백분율 표시 ("42%"). 없으면 null.
+  String? get confidenceLabel => confidence == null ? null : '${(confidence! * 100).round()}%';
+
   TranscriptEntry copyWith({
     int? tEndMs,
     String? text,
@@ -63,6 +74,8 @@ class TranscriptEntry {
     String? speaker,
     bool? late,
     bool? revised,
+    double? confidence,
+    bool? uncertain,
     bool clearTranslation = false,
   }) =>
       TranscriptEntry(
@@ -79,6 +92,8 @@ class TranscriptEntry {
         speaker: speaker ?? this.speaker,
         late: late ?? this.late,
         revised: revised ?? this.revised,
+        confidence: confidence ?? this.confidence,
+        uncertain: uncertain ?? this.uncertain,
       );
 
   static String formatMs(int ms) {

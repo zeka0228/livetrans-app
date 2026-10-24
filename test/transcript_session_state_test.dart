@@ -150,6 +150,41 @@ void main() {
     });
   });
 
+  group('문맥 재채점 (API 계약 S-30)', () {
+    test('translation.final 의 confidence·uncertain 이 줄에 남고, 후속 hypothesis 교정은 원문만 바꾼다', () {
+      var s = const TranscriptSessionState();
+      s = reduceTranscript(s, _ev('segment.final', _final(1, 'the gain is on')));
+      s = reduceTranscript(s, _ev('translation.final', {
+        ..._translation(1, '게인이 켜져 있어'), 'confidence': 0.42, 'uncertain': true,
+      }));
+      var e = s.entries.single;
+      expect(e.translation, '게인이 켜져 있어');
+      expect(e.confidence, 0.42);
+      expect(e.uncertain, isTrue);
+      expect(e.confidenceLabel, '42%');
+      s = reduceTranscript(s, _ev('segment.update', {
+        'seg_id': 1, 'text': 'the game is on', 'prev_text': 'the gain is on', 'reason': 'hypothesis',
+      }));
+      e = s.entries.single;
+      expect(e.text, 'the game is on');
+      expect(e.revised, isTrue);
+      expect(e.uncertain, isTrue, reason: '교정 이벤트에는 확신도가 없으니 표시는 유지');
+    });
+
+    test('passthrough(원문 = 번역)여도 확신도는 기록한다, 필드가 없으면 기본값', () {
+      var s = const TranscriptSessionState();
+      s = reduceTranscript(s, _ev('segment.final', _final(1, '같은 문장')));
+      s = reduceTranscript(s, _ev('translation.final', {..._translation(1, '같은 문장'), 'confidence': 0.9}));
+      expect(s.entries.single.translation, isNull);
+      expect(s.entries.single.confidence, 0.9);
+      expect(s.entries.single.uncertain, isFalse);
+      s = reduceTranscript(s, _ev('segment.final', _final(2, 'b', tStart: 5000)));
+      s = reduceTranscript(s, _ev('translation.final', _translation(2, 'B')));
+      expect(s.entries.last.confidence, isNull);
+      expect(s.entries.last.confidenceLabel, isNull);
+    });
+  });
+
   test('recoverable error 는 경고만, session.state 는 그대로 기록, ended 는 partial 만 지운다', () {
     var s = const TranscriptSessionState();
     s = reduceTranscript(s, _ev('session.state', {'state': 'playing'}));

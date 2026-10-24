@@ -12,6 +12,7 @@ import 'transcript_entry.dart';
 ///   같은 키의 final 이 다시 오면 그 자리에서 덮어쓴다 (번역 유지).
 /// - `translation.final` 은 같은 (seg_id, speaker) 기록에 번역문을 붙인다. 원문과 똑같은 번역
 ///   (S-20 ②③ `passthrough`) 은 붙이지 않는다 — 같은 문장을 두 번 보여줄 이유가 없다.
+///   `confidence`/`uncertain` (S-30) 은 번역 유무와 상관없이 그 줄에 기록한다.
 /// - `segment.update` / `translation.update` (S-28 2차 패스) 는 같은 (seg_id, speaker) 줄의 원문/번역을 `text` 로
 ///   교체하고 `revised` 를 켠다. 원문 교정으로 번역이 원문과 같아지면(passthrough) 번역을 지운다.
 /// - `deadline.event` L3 는 그 문장을 "지연" 으로 표시한다 (모드 A).
@@ -136,8 +137,12 @@ TranscriptSessionState reduceTranscript(
       return s.copyWith(
         entries: [
           for (final e in s.entries)
-            if (e.sameAs(p.segId, p.speaker) && p.text.trim() != e.text.trim())
-              e.copyWith(translation: p.text)
+            if (e.sameAs(p.segId, p.speaker))
+              e.copyWith(
+                translation: p.text.trim() != e.text.trim() ? p.text : null,
+                confidence: p.confidence,
+                uncertain: p.uncertain,
+              )
             else
               e,
         ],

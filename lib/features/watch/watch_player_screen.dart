@@ -423,6 +423,9 @@ class _CueBox extends StatelessWidget {
       _ => null,
     };
     final speaker = showSpeaker ? cue.speaker : null;
+    // 번역 확신도가 낮은 줄(S-30): 번역이 보일 때만 기울임 + 흐리게 + 물음표.
+    final primaryIsTranslation = translation != null && mode != SubtitleMode.original;
+    final dim = cue.uncertain && primaryIsTranslation;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Container(
@@ -446,7 +449,12 @@ class _CueBox extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-                  TextSpan(text: primary),
+                  TextSpan(
+                    text: dim ? '$primary ?' : primary,
+                    style: dim
+                        ? TextStyle(color: Colors.white.withValues(alpha: 0.78), fontStyle: FontStyle.italic)
+                        : null,
+                  ),
                 ],
               ),
               textAlign: TextAlign.center,
