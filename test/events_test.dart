@@ -143,6 +143,33 @@ void main() {
     });
   });
 
+  group('2차 패스 갱신 이벤트 (API 계약 S-28)', () {
+    test('translation.update → RevisionPayload(translation)', () {
+      final e = ServerEvent.fromJson({
+        'v': 1, 'type': 'translation.update', 'seq': 9, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 3, 'speaker': 'S1', 'text': '아니 다른 열쇠 말이야', 'prev_text': '다른 거', 'reason': 'context'},
+      });
+      final p = e.payload as RevisionPayload;
+      expect(p.kind, RevisionKind.translation);
+      expect(p.segId, 3);
+      expect(p.speaker, 'S1');
+      expect(p.text, '아니 다른 열쇠 말이야');
+      expect(p.prevText, '다른 거');
+      expect(p.reason, 'context');
+    });
+
+    test('segment.update → RevisionPayload(segment), speaker 없으면 null', () {
+      final e = ServerEvent.fromJson({
+        'v': 1, 'type': 'segment.update', 'seq': 9, 'session_id': 's', 'ts_wall_ms': 0,
+        'payload': {'seg_id': 4, 'text': '볼래?', 'prev_text': '불레', 'reason': 'context'},
+      });
+      final p = e.payload as RevisionPayload;
+      expect(p.kind, RevisionKind.segment);
+      expect(p.speaker, isNull);
+      expect(p.text, '볼래?');
+    });
+  });
+
   test('ClientMessage.control은 명세 형식의 JSON을 만든다', () {
     expect(
       ClientMessage.control('start'),

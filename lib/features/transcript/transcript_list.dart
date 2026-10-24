@@ -190,6 +190,20 @@ class TranscriptTile extends StatelessWidget {
                         color: scheme.tertiary,
                       ),
                     ],
+                    if (entry.revised) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: '뒤 문맥으로 서버가 고친 줄 (2차 패스)',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.auto_fix_high_rounded, size: 12, color: scheme.tertiary),
+                            const SizedBox(width: 2),
+                            Text('교정', style: TextStyle(fontSize: 11, color: scheme.tertiary)),
+                          ],
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     if (onTap != null)
                       IconButton(
