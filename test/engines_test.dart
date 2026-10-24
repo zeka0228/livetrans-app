@@ -88,6 +88,40 @@ void main() {
       expect(EngineCatalog.fromJson(const {}).isEmpty, isTrue);
     });
 
+    test('권장 = STT auto + 서버 기본 모델 (+ 서버 recommended 플래그)', () {
+      final c = EngineCatalog.fromJson(catalogJson);
+      expect(c.isSttRecommended('auto'), isTrue);
+      expect(c.isSttRecommended('dicow'), isFalse);
+      expect(c.recommendedSttEngines, isEmpty);
+      expect(c.isMtRecommended('gemma2:9b'), isTrue); // default_model
+      expect(c.isMtRecommended('gemma3:12b-it-qat'), isFalse);
+      expect(c.recommendedMtModels.map((m) => m.name), ['gemma2:9b']);
+
+      final flagged = EngineCatalog.fromJson({
+        'stt': {
+          'default': 'auto',
+          'route_by_lang': {},
+          'engines': [{'name': 'x', 'recommended': true}, {'name': 'y'}],
+        },
+        'mt': {
+          'engine': 'ollama_llm',
+          'default_model': 'a',
+          'models': [{'name': 'a'}, {'name': 'b', 'recommended': true}, {'name': 'c'}],
+        },
+      });
+      expect(flagged.isSttRecommended('x'), isTrue);
+      expect(flagged.recommendedSttEngines.single.name, 'x');
+      expect(flagged.recommendedMtModels.map((m) => m.name), ['a', 'b']);
+    });
+
+    test('routingHint: 언어별 라우팅이 있으면 언어 지정 안내, 없으면 null', () {
+      final c = EngineCatalog.fromJson(catalogJson);
+      expect(c.routingHint, contains("'한국어'(ko) → faster_whisper"));
+      expect(c.routingHint, contains("'일본어'(ja) → faster_whisper"));
+      expect(c.routingHint, contains('방송 언어를 해당 언어로 지정'));
+      expect(EngineCatalog.fromJson(const {}).routingHint, isNull);
+    });
+
     test('MtModelInfo.sizeLabel: 1 GB 미만은 MB, 모르면 null', () {
       expect(const MtModelInfo(name: 'x', sizeMb: 621).sizeLabel, '621 MB');
       expect(const MtModelInfo(name: 'x').sizeLabel, isNull);

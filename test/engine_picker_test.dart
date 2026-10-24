@@ -68,14 +68,32 @@ void main() {
     expect(find.textContaining('자동', findRichText: true), findsWidgets);
     expect(find.textContaining('서버 기본', findRichText: true), findsWidgets);
 
-    // STT: dicow 선택
+    // STT: 기본으로는 "자동"(권장)만. "엔진 직접 지정 전체 보기" 뒤 dicow 선택
+    expect(find.text('권장'), findsWidgets);
     await tester.tap(find.byKey(const Key('engine-picker-stt')));
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('dicow', findRichText: true).last);
+    expect(find.textContaining('BUT-FIT/DiCoW_v3_3', findRichText: true), findsNothing);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('engine-picker-stt-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('engine-picker-stt')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('BUT-FIT/DiCoW_v3_3', findRichText: true).last);
     await tester.pumpAndSettle();
     expect(container.read(engineControllerProvider).selection.sttEngine, 'dicow');
+    // 일본어 라우팅 안내
+    expect(find.textContaining('방송 언어를 해당 언어로 지정'), findsOneWidget);
 
-    // 번역 모델: gemma3 선택 → 모델 교체 안내
+    // 번역 모델: 기본으로는 권장(서버 기본)만 보이고 gemma3 는 숨어 있다 → "전체 보기" 뒤 선택 → 모델 교체 안내
+    await tester.tap(find.byKey(const Key('engine-picker-mt')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('gemma3:12b-it-qat', findRichText: true), findsNothing);
+    await tester.tapAt(const Offset(5, 5)); // 메뉴 닫기
+    await tester.pumpAndSettle();
+    expect(find.textContaining('다른 모델 전체 보기 (1개 더)'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('engine-picker-mt-more')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('engine-picker-mt')));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('gemma3:12b-it-qat', findRichText: true).last);
