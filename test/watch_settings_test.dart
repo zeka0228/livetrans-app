@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:livetrans_app/core/models/events.dart';
 import 'package:livetrans_app/core/models/session.dart';
 import 'package:livetrans_app/features/transcript/transcript_session_state.dart';
+import 'package:livetrans_app/features/watch/watch_controller.dart';
 import 'package:livetrans_app/features/watch/watch_settings.dart';
 
 ServerEvent ev(String type, Map<String, dynamic> payload) => ServerEvent.fromJson({
@@ -99,6 +100,42 @@ void main() {
       }).payload as MetricsPayload;
       expect(p.gpuUtilStream, 0.35);
       expect(p.p99Ms['stt'], 900);
+    });
+  });
+
+  group('WatchState.startBlockReason (API 계약 S-29 ③)', () {
+    const supported = RouteCheckState(status: RouteCheckStatus.idle);
+
+    test('소리만 + 격리 지원 서버 + 장치 미선택 → 시작 막음', () {
+      const st = WatchState(settings: WatchSettings(), route: supported);
+      expect(st.routeSupported, isTrue);
+      expect(st.startBlockReason, contains('격리 장치를 골라야'));
+    });
+
+    test('장치를 고르면 시작 가능', () {
+      const st = WatchState(settings: WatchSettings(isolationDeviceId: 'device:x'), route: supported);
+      expect(st.startBlockReason, isNull);
+    });
+
+    test('OBS 입력은 장치 없이도 시작 가능', () {
+      const st = WatchState(settings: WatchSettings(sourceKind: WatchSourceKind.obs), route: supported);
+      expect(st.startBlockReason, isNull);
+    });
+
+    test('구 서버(미지원)·아직 모름이면 막지 않는다 (서버가 400 으로 답하면 그때 오류 표시)', () {
+      for (final status in [RouteCheckStatus.unsupported, RouteCheckStatus.unknown, RouteCheckStatus.loadingDevices]) {
+        final st = WatchState(settings: const WatchSettings(), route: RouteCheckState(status: status));
+        expect(st.routeSupported, isFalse);
+        expect(st.startBlockReason, isNull, reason: '$status');
+      }
+    });
+
+    test('점검 실패가 우선', () {
+      const st = WatchState(
+        settings: WatchSettings(isolationDeviceId: 'device:x'),
+        route: RouteCheckState(status: RouteCheckStatus.failed),
+      );
+      expect(st.startBlockReason, contains('점검을 통과'));
     });
   });
 }
