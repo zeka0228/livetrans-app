@@ -9,6 +9,7 @@ import '../../core/config/server_config.dart';
 import '../../core/models/events.dart';
 import '../../core/models/session.dart';
 import '../../core/session/stt_session.dart';
+import '../engines/engine_controller.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_session_state.dart';
 import 'pcm_framer.dart';
@@ -114,8 +115,13 @@ class MicController extends Notifier<MicState> {
         config: ref.read(serverConfigProvider),
       );
       _client = client;
+      final engines = ref.read(engineControllerProvider).selection;
       final session = await client.open(
-        SessionRequest.mic(srcLang: state.language),
+        SessionRequest.mic(
+          srcLang: state.language,
+          sttEngine: engines.sttEngineForRequest,
+          mtModel: engines.mtModel,
+        ),
       );
       _eventSub = client.events.listen(
         _onEvent,
@@ -237,7 +243,7 @@ class MicController extends Notifier<MicState> {
   }
 
   static String _describe(Object e) {
-    if (e is ApiException) return '서버 응답 오류: $e';
+    if (e is ApiException) return describeEngineError(e) ?? '서버 응답 오류: $e';
     if (e is TimeoutException) return '서버 응답 시간 초과';
     if (e is StateError) return e.message;
     return '연결 실패: $e';

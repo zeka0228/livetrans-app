@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/server_config.dart';
+import '../engines/engine_controller.dart';
+import '../engines/engine_picker.dart';
 import '../transcript/session_widgets.dart';
 import 'watch_controller.dart';
 import 'watch_player_screen.dart';
@@ -128,6 +130,7 @@ class _WatchSetupScreenState extends ConsumerState<WatchSetupScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          _EngineSection(enabled: !locked),
           _SectionTitle('지연 (D)'),
           _DelayCard(
             state: state,
@@ -190,6 +193,27 @@ class _WatchSetupScreenState extends ConsumerState<WatchSetupScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 엔진 선택 섹션 (API 계약 S-26). 서버가 `/api/engines` 를 안 주면 제목까지 통째로 숨긴다.
+class _EngineSection extends ConsumerWidget {
+  const _EngineSection({required this.enabled});
+
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final show = ref.watch(engineControllerProvider.select((s) => s.showPicker));
+    if (!show) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionTitle('엔진 (인식·번역)'),
+        EnginePicker(enabled: enabled),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }

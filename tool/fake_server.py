@@ -105,6 +105,55 @@ def beep_wav(freq: float, seconds: float = 0.8, rate: int = 16000) -> bytes:
     return buf.getvalue()
 
 
+# ---- 엔진·모델 선택 (API 계약 S-26) --------------------------------------------------
+FAKE_ENGINES = {
+    "stt": {
+        "default": "auto",
+        "route_by_lang": {"ko": "faster_whisper", "ja": "faster_whisper"},
+        "engines": [
+            {"name": "dicow", "model": "BUT-FIT/DiCoW_v3_3", "role": "primary",
+             "languages": ["ko", "en", "ja"], "speaker_mask": True},
+            {"name": "faster_whisper", "model": "large-v3", "role": "rescue",
+             "languages": ["ko", "en", "ja"], "speaker_mask": False},
+        ],
+    },
+    "mt": {
+        "engine": "ollama_llm",
+        "default_model": "gemma2:9b",
+        "models": [
+            {"name": "gemma2:9b", "size_mb": 5160},
+            {"name": "gemma3:12b-it-qat", "size_mb": 8500},
+            {"name": "qwen2.5:7b", "size_mb": 4700},
+        ],
+    },
+}
+# FAKE_NO_ENGINES=1 이면 구 서버처럼 404 (앱이 선택 칸을 숨기는지 확인용).
+FAKE_NO_ENGINES = os.environ.get("FAKE_NO_ENGINES") == "1"
+# 기본과 다른 번역 모델을 고르면 모델 교체처럼 N 초 기다린다 (기본 3 s).
+FAKE_MT_SWAP_S = float(os.environ.get("FAKE_MT_SWAP_S", "3"))
+
+
+@app.get("/api/engines")
+async def engines():
+    if FAKE_NO_ENGINES:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FAKE_ENGINES
+
+
+async def check_engine_choice(body: dict) -> None:
+    stt = (body.get("stt") or {}).get("engine", "auto")
+    names = {e["name"] for e in FAKE_ENGINES["stt"]["engines"]}
+    if stt != "auto" and stt not in names:
+        raise error(400, "E_STT_ENGINE",
+                    f"STT 엔진 {stt!r} 는 떠 있지 않습니다 (가능: auto, {', '.join(sorted(names))})")
+    model = (body.get("mt") or {}).get("model")
+    if model is not None:
+        if model not in {m["name"] for m in FAKE_ENGINES["mt"]["models"]}:
+            raise error(400, "E_MT_MODEL", f"번역 모델 {model!r} 을 쓸 수 없습니다 (Ollama 에 없거나 연결 실패)")
+        if model != FAKE_ENGINES["mt"]["default_model"]:
+            await asyncio.sleep(FAKE_MT_SWAP_S)
+
+
 @app.get("/api/voices")
 async def voices():
     return {"languages": sorted(TTS_LANGS), "voices": [{"voice_ref": "fake:beep", "languages": sorted(TTS_LANGS)}]}
@@ -198,6 +247,7 @@ async def create_session(body: dict):
                 raise error(400, "E_ROUTE_NOT_ISOLATED", "원본 소리가 격리되지 않았습니다", problems=status["problems"])
     else:
         raise error(501, "E_NOT_IMPLEMENTED", f"mode={mode}, source={stype} 는 지원하지 않습니다")
+    await check_engine_choice(body)
 
     sid = uuid.uuid4().hex[:8]
     requested = body.get("delay_s")

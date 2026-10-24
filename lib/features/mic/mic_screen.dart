@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/tts/tts_player.dart';
+import '../engines/engine_picker.dart';
 import '../transcript/session_widgets.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_list.dart';
@@ -53,6 +54,10 @@ class MicScreen extends ConsumerWidget {
               enabled: !locked,
               onChanged: controller.setLanguage,
             ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+            child: EnginePicker(enabled: !locked, compact: true),
           ),
           SessionStatusBar(
             label: label,
