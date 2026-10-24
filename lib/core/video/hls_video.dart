@@ -15,6 +15,9 @@ enum HlsVideoStatus {
   /// 데이터가 모자라 멈춤 (라이브 엣지 뒤처짐 등).
   buffering,
   paused,
+
+  /// 플레이리스트 끝(ENDLIST)까지 다 틀었다. 모드 A 는 입력이 끝난 뒤 D 초가 더 나오고 여기로 온다 (S-31).
+  ended,
   error,
 
   /// 이 플랫폼(또는 브라우저)에서 재생 불가.

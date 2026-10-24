@@ -25,6 +25,11 @@ enum WatchPhase {
   buffering,
   playing,
   stopping,
+
+  /// 입력이 정상 종료(`E_INPUT_ENDED`, S-31)되고 서버 세션은 `stopped` 됐지만, HLS 에 D 초만큼 지연된
+  /// 내용이 남아 있어 플레이어·자막을 계속 보여 주는 단계. 플레이어가 ENDLIST 에 닿거나
+  /// [WatchState.drainUntilMs] 가 지나면 [ended].
+  draining,
   ended,
   error;
 
@@ -46,6 +51,9 @@ enum WatchPhase {
 
   bool get isBusy => this == WatchPhase.connecting || this == WatchPhase.stopping;
 
+  /// 플레이어가 재생 중이고 자막을 그려야 하는 단계 (재생 중 + 방송 끝 뒤 남은 지연분).
+  bool get isPlayback => this == WatchPhase.playing || this == WatchPhase.draining;
+
   String get label => switch (this) {
         WatchPhase.idle => '대기',
         WatchPhase.connecting => '서버 연결 중',
@@ -54,6 +62,7 @@ enum WatchPhase {
         WatchPhase.buffering => '지연 버퍼 채우는 중',
         WatchPhase.playing => '재생 중',
         WatchPhase.stopping => '마지막 문장 정리 중',
+        WatchPhase.draining => '방송 끝 · 남은 지연분 재생 중',
         WatchPhase.ended => '종료됨',
         WatchPhase.error => '오류',
       };
@@ -135,7 +144,8 @@ class WatchError {
         'E_ROUTE_LOST' => '격리 장치(모니터 오디오 등)가 꺼지거나 분리됐습니다. 장치를 다시 연결하고 점검 후 시작하세요.',
         'E_ROUTE_NOT_ISOLATED' =>
           '브라우저 출력 장치를 격리 장치로 바꾼 뒤 "소리 격리 점검"을 통과해야 시작할 수 있습니다.',
-        'E_CAPTURE_LOST' => '방송(OBS 스트림·파일)이 끝났거나 소리 장치가 바뀌었습니다. 방송이 정상 종료된 경우에도 이 코드로 끝납니다.',
+        'E_CAPTURE_LOST' =>
+          '연결 거부·시간 초과·디코딩 실패 또는 소리 장치 변경입니다. 방송이 정상적으로 끝난 경우는 오류 없이 "방송이 끝났습니다"로 표시됩니다.',
         'E_NOT_IMPLEMENTED' => '서버가 모드 A 를 올리면 같은 화면으로 바로 연결됩니다. 지금은 UI 만 미리 준비된 상태입니다.',
         'E_CONNECTION_LOST' => '서버가 꺼졌거나 네트워크가 끊겼습니다. 서버 상태를 확인한 뒤 다시 시도하세요.',
         'E_TIMEOUT' => '서버를 방금 켰다면 모델 로드 중(10~20 s)일 수 있습니다.',
@@ -165,6 +175,8 @@ class WatchState {
     this.startedAt,
     this.endedAt,
     this.restoreGuide,
+    this.inputEnded = false,
+    this.drainUntilMs,
   });
 
   final WatchSettings settings;
@@ -193,6 +205,25 @@ class WatchState {
 
   /// 세션 종료 시 보여줄 복구 안내 ("브라우저 출력을 원래 장치로", 명세 §4.9).
   final String? restoreGuide;
+
+  /// 서버가 `E_INPUT_ENDED` (입력 정상 종료, S-31) 를 보냈다. 이어서 오는 `stopped` 는 종료 화면 대신
+  /// [WatchPhase.draining] 으로 간다.
+  final bool inputEnded;
+
+  /// [WatchPhase.draining] 을 늦어도 이 벽시계(ms)에는 끝낸다 (플레이어 ENDLIST 신호가 없을 때의 보험).
+  final int? drainUntilMs;
+
+  /// 방송 끝 뒤 남은 재생 시간(초, 0 이상). draining 이 아니면 null.
+  int? drainRemainingS(int nowMs) {
+    final until = drainUntilMs;
+    if (phase != WatchPhase.draining || until == null) return null;
+    return ((until - nowMs) / 1000).ceil().clamp(0, 1 << 30);
+  }
+
+  /// 방송 끝 뒤 플레이어를 더 틀어 둘 마감: 지연 D 초 + 여유. 서버는 남은 인식·번역·HLS 플러시를 끝낸 뒤
+  /// `E_INPUT_ENDED` 를 보내므로 실제 남은 양은 이보다 짧다 — 플레이어 ENDLIST 가 먼저 오면 그때 끝낸다.
+  static const drainMarginMs = 2000;
+  static int drainDeadline(int nowMs, int? delayS) => nowMs + (delayS ?? 0) * 1000 + drainMarginMs;
 
   List<TranscriptEntry> get entries => transcript.entries;
   int? get delayS => clock.delayS;
@@ -259,6 +290,9 @@ class WatchState {
     bool clearTimes = false,
     String? restoreGuide,
     bool clearRestoreGuide = false,
+    bool? inputEnded,
+    int? drainUntilMs,
+    bool clearDrain = false,
   }) =>
       WatchState(
         settings: settings ?? this.settings,
@@ -281,6 +315,8 @@ class WatchState {
         startedAt: clearTimes ? null : (startedAt ?? this.startedAt),
         endedAt: clearTimes ? null : (endedAt ?? this.endedAt),
         restoreGuide: clearRestoreGuide ? null : (restoreGuide ?? this.restoreGuide),
+        inputEnded: clearDrain ? false : (inputEnded ?? this.inputEnded),
+        drainUntilMs: clearDrain ? null : (drainUntilMs ?? this.drainUntilMs),
       );
 }
 
@@ -291,10 +327,14 @@ class WatchState {
 class WatchController extends Notifier<WatchState> {
   SttSessionClient? _client;
   StreamSubscription<ServerEvent>? _sub;
+  Timer? _drainTimer;
 
   @override
   WatchState build() {
-    ref.onDispose(() => unawaited(_teardown()));
+    ref.onDispose(() {
+      _drainTimer?.cancel();
+      unawaited(_teardown());
+    });
     return const WatchState();
   }
 
@@ -455,6 +495,7 @@ class WatchController extends Notifier<WatchState> {
       clearMetrics: true,
       clearTimes: true,
       clearRestoreGuide: true,
+      clearDrain: true,
       clock: const PlaybackClock(),
       deadlines: const DeadlineStats(),
       transcript: const TranscriptSessionState(),
@@ -490,6 +531,10 @@ class WatchController extends Notifier<WatchState> {
   }
 
   Future<void> stop() async {
+    if (state.phase == WatchPhase.draining) {
+      _finishDrain();
+      return;
+    }
     if (!state.isLive) return;
     state = state.copyWith(phase: WatchPhase.stopping);
     try {
@@ -508,6 +553,7 @@ class WatchController extends Notifier<WatchState> {
 
   /// 오류·종료 화면에서 같은 설정으로 다시 시작.
   Future<void> retry() async {
+    _drainTimer?.cancel();
     await _teardown();
     state = state.copyWith(phase: WatchPhase.idle);
     await start();
@@ -516,8 +562,25 @@ class WatchController extends Notifier<WatchState> {
   /// 플레이어 화면을 닫을 때. 실행 중이면 정지까지 한다.
   Future<void> leave() async {
     if (state.isLive) await stop();
+    _drainTimer?.cancel();
     await _teardown();
-    state = state.copyWith(phase: WatchPhase.idle, clearError: true);
+    state = state.copyWith(phase: WatchPhase.idle, clearError: true, clearDrain: true);
+  }
+
+  /// 플레이어가 플레이리스트 끝(ENDLIST)에 닿았다 — 남은 지연분 재생 끝 (S-31).
+  void onHlsEnded() {
+    if (state.phase == WatchPhase.draining) _finishDrain();
+  }
+
+  void _finishDrain() {
+    _drainTimer?.cancel();
+    _drainTimer = null;
+    if (state.phase != WatchPhase.draining) return;
+    state = state.copyWith(
+      phase: WatchPhase.ended,
+      endedAt: DateTime.now(),
+      transcript: state.transcript.ended(),
+    );
   }
 
   void _onEvent(ServerEvent event) {
@@ -528,7 +591,19 @@ class WatchController extends Notifier<WatchState> {
     );
     switch (event.payload) {
       case SessionStatePayload p:
-        final phase = WatchPhase.fromServer(p.state);
+        var phase = WatchPhase.fromServer(p.state);
+        // 입력이 정상 종료(E_INPUT_ENDED)된 뒤의 stopped: 서버 세션은 끝났지만 HLS 에 D 초가 남아 있으니
+        // 종료 화면 대신 플레이어를 유지한다 (S-31). 사용자가 직접 정지한 경우는 그냥 끝.
+        final drain = phase == WatchPhase.ended &&
+            state.inputEnded &&
+            state.phase != WatchPhase.stopping;
+        if (drain) {
+          phase = WatchPhase.draining;
+          final until = WatchState.drainDeadline(now, state.delayS ?? p.delayS);
+          _drainTimer?.cancel();
+          _drainTimer = Timer(Duration(milliseconds: until - now), _finishDrain);
+          next = next.copyWith(drainUntilMs: until);
+        }
         next = next.copyWith(
           phase: phase == WatchPhase.ended && state.phase == WatchPhase.stopping ? null : phase,
           clock: next.clock.copyWith(
@@ -545,8 +620,15 @@ class WatchController extends Notifier<WatchState> {
         );
       case MetricsPayload p:
         next = next.copyWith(metrics: p);
+      case ErrorPayload p when p.code == 'E_INPUT_ENDED':
+        // 입력 정상 종료 (S-31): 오류가 아니다. 곧 stopped 가 오면 draining 으로.
+        next = next.copyWith(
+          inputEnded: true,
+          warning: describeRecoverable(p),
+          warningSeq: state.warningSeq + 1,
+        );
       case ErrorPayload p when p.recoverable:
-        next = next.copyWith(warning: '${p.code}: ${p.message}', warningSeq: state.warningSeq + 1);
+        next = next.copyWith(warning: describeRecoverable(p), warningSeq: state.warningSeq + 1);
       case ErrorPayload p:
         state = next;
         _fail(WatchError(code: p.code, message: p.message));

@@ -197,6 +197,13 @@ void main() {
     expect(s.ended().warning, 'E_STT_FAILED: x');
   });
 
+  test('E_INPUT_ENDED (S-31) 는 오류 코드 대신 "방송이 끝났습니다" 경고 문구', () {
+    var s = const TranscriptSessionState();
+    s = reduceTranscript(s, _ev('error', {'code': 'E_INPUT_ENDED', 'message': '입력이 끝났습니다 (eof)', 'recoverable': true}));
+    expect(s.warning, startsWith('방송이 끝났습니다'));
+    expect(s.warning, isNot(contains('E_INPUT_ENDED')));
+  });
+
   group('2차 패스 갱신 (API 계약 S-28)', () {
     TranscriptSessionState seed() {
       var s = const TranscriptSessionState();
