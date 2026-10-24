@@ -203,6 +203,31 @@ class WatchState {
   /// 서버가 `hls_url` 을 줬는가 (모드 A 는 영상 유무와 관계없이 준다, S-21 ①③).
   bool get hasStream => hlsUrl != null;
 
+  /// 서버가 소리 격리(`/api/audio/*`)를 지원한다고 확인됐는가 (장치 목록을 받은 뒤).
+  bool get routeSupported => switch (route.status) {
+        RouteCheckStatus.unknown ||
+        RouteCheckStatus.loadingDevices ||
+        RouteCheckStatus.unsupported =>
+          false,
+        _ => true,
+      };
+
+  /// 시작을 막아야 하는 이유. null 이면 시작 가능 (API 계약 S-29 ③).
+  ///
+  /// - 점검 실패 → 통과해야 시작.
+  /// - **"소리만" 입력은 격리 장치가 필수**: PC 전체 소리를 캡처하면 지연 출력이 다시 녹음되므로 서버가
+  ///   400 `E_ROUTE_NOT_ISOLATED` 로 거부한다. 서버가 격리를 지원하는 걸 확인한 뒤에만 막는다
+  ///   (구 서버·가짜 서버는 `route` 없이도 시작).
+  String? get startBlockReason {
+    if (route.blocksStart) return '소리 격리 점검을 통과해야 시작할 수 있어요';
+    if (settings.sourceKind == WatchSourceKind.audioOnly &&
+        routeSupported &&
+        settings.isolationDeviceId == null) {
+      return '소리만 입력은 격리 장치를 골라야 시작할 수 있어요 (PC 전체 소리는 되먹임 때문에 서버가 거부합니다)';
+    }
+    return null;
+  }
+
   int? get recommendedNextDelayS => recommendedNextDelay(
         delayS: delayS,
         missRate: metrics?.missRate ?? 0,

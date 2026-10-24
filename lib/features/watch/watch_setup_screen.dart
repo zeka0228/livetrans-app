@@ -179,17 +179,16 @@ class _WatchSetupScreenState extends ConsumerState<WatchSetupScreen> {
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
-            onPressed: locked || state.route.blocksStart ? null : _start,
+            onPressed: locked || state.startBlockReason != null ? null : _start,
             icon: const Icon(Icons.play_arrow_rounded),
             label: Text(state.isLive ? '재생 중…' : '시청 시작'),
           ),
           const SizedBox(height: 8),
           Text(
-            state.route.blocksStart
-                ? '소리 격리 점검을 통과해야 시작할 수 있어요'
-                : '시작하면 ${s.autoDelay ? '서버 권장' : '${s.manualDelayS}초'} 지연 뒤부터 자막·음성이 맞춰진 영상이 나옵니다',
+            state.startBlockReason ??
+                '시작하면 ${s.autoDelay ? '서버 권장' : '${s.manualDelayS}초'} 지연 뒤부터 자막·음성이 맞춰진 영상이 나옵니다',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 11, color: state.route.blocksStart ? scheme.error : scheme.outline),
+            style: TextStyle(fontSize: 11, color: state.startBlockReason != null ? scheme.error : scheme.outline),
           ),
         ],
       ),
@@ -520,7 +519,8 @@ class _RouteCard extends StatelessWidget {
             ] else if (route.status == RouteCheckStatus.idle || route.status == RouteCheckStatus.failed) ...[
               const SizedBox(height: 8),
               const _GuideBox(
-                text: 'Windows 설정 → 시스템 → 소리 → 볼륨 믹서에서 브라우저의 "출력 장치"만 격리 장치로 바꾸세요. 우리 앱은 평소 스피커 그대로 둡니다.',
+                text: 'Windows 설정 → 시스템 → 소리 → 볼륨 믹서에서 브라우저의 "출력 장치"만 격리 장치로 바꾸세요. 우리 앱은 평소 스피커 그대로 둡니다. '
+                    '점검하는 동안에는 원본 방송만 격리 장치로 재생하고 다른 소리는 끄세요 (1.5초 동안 스피커가 조용하고 격리 장치에 소리가 있어야 통과).',
               ),
             ],
             if (route.status != RouteCheckStatus.unsupported &&
