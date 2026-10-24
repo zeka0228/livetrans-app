@@ -118,7 +118,7 @@ class WatchError {
   String get title => switch (code) {
         'E_ROUTE_LOST' => '격리 장치 연결이 끊겼습니다',
         'E_ROUTE_NOT_ISOLATED' => '원본 소리가 격리되지 않았습니다',
-        'E_CAPTURE_LOST' => '캡처가 끊겼습니다',
+        'E_CAPTURE_LOST' => '방송 입력이 끊겼습니다',
         'E_CAPTURE_START' => '캡처를 시작하지 못했습니다',
         'E_CAPTURE_TARGET' => '캡처 대상을 찾을 수 없습니다',
         'E_CAPTURE_UNAVAILABLE' => '서버에 캡처 도구가 없습니다',
@@ -134,7 +134,7 @@ class WatchError {
         'E_ROUTE_LOST' => '격리 장치(모니터 오디오 등)가 꺼지거나 분리됐습니다. 장치를 다시 연결하고 점검 후 시작하세요.',
         'E_ROUTE_NOT_ISOLATED' =>
           '브라우저 출력 장치를 격리 장치로 바꾼 뒤 "소리 격리 점검"을 통과해야 시작할 수 있습니다.',
-        'E_CAPTURE_LOST' => '방송 창이 닫혔거나 소리 장치가 바뀌었습니다.',
+        'E_CAPTURE_LOST' => '방송(OBS 스트림·파일)이 끝났거나 소리 장치가 바뀌었습니다. 방송이 정상 종료된 경우에도 이 코드로 끝납니다.',
         'E_NOT_IMPLEMENTED' => '서버가 모드 A 를 올리면 같은 화면으로 바로 연결됩니다. 지금은 UI 만 미리 준비된 상태입니다.',
         'E_CONNECTION_LOST' => '서버가 꺼졌거나 네트워크가 끊겼습니다. 서버 상태를 확인한 뒤 다시 시도하세요.',
         'E_TIMEOUT' => '서버를 방금 켰다면 모델 로드 중(10~20 s)일 수 있습니다.',
@@ -196,7 +196,11 @@ class WatchState {
   List<TranscriptEntry> get entries => transcript.entries;
   int? get delayS => clock.delayS;
   bool get isLive => phase.isLive;
-  bool get hasVideo => settings.sourceKind == WatchSourceKind.obs && hlsUrl != null;
+  /// 소스에 영상이 있다고 기대하는가 (`obs_stream`). 소리만 모드도 서버 HLS(오디오 믹스)는 준다 → [hasStream].
+  bool get hasVideo => settings.sourceKind == WatchSourceKind.obs;
+
+  /// 서버가 `hls_url` 을 줬는가 (모드 A 는 영상 유무와 관계없이 준다, S-21 ①③).
+  bool get hasStream => hlsUrl != null;
 
   int? get recommendedNextDelayS => recommendedNextDelay(
         delayS: delayS,

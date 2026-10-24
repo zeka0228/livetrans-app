@@ -165,7 +165,7 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
             hlsUrl: state.hlsUrl == null
                 ? null
                 : ref.read(serverConfigProvider).resolve(state.hlsUrl!),
-            audioOnly: !state.hasVideo,
+            expectVideo: state.hasVideo,
             playing: state.phase == WatchPhase.playing,
             muted: state.muted,
             volume: state.originalVolume,

@@ -90,6 +90,59 @@ void main() {
     });
   });
 
+  group('모드 A 이벤트 (API 계약 S-21 ④)', () {
+    test('tts.ready: audio_url null·speaker 를 읽는다', () {
+      final ev = ServerEvent.fromJson({
+        'v': 1, 'type': 'tts.ready', 'seq': 3, 'session_id': 's1', 'ts_wall_ms': 1,
+        'payload': {'seg_id': 9, 'duration_ms': 1800, 'rate': 1.02, 'voice_ref': 'system:Heami',
+                    'tts_ms': 320, 'audio_url': null, 'speaker': 'S1'},
+      });
+      final p = ev.payload as TtsReadyPayload;
+      expect(p.segId, 9);
+      expect(p.durationMs, 1800);
+      expect(p.rate, closeTo(1.02, 1e-9));
+      expect(p.audioUrl, isNull);
+      expect(p.speaker, 'S1');
+    });
+
+    test('tts.ready: speaker 가 없거나 비면 null (모드 B 호환)', () {
+      final ev = ServerEvent.fromJson({
+        'v': 1, 'type': 'tts.ready', 'seq': 4, 'session_id': 's1', 'ts_wall_ms': 1,
+        'payload': {'seg_id': 1, 'duration_ms': 500, 'rate': 1.0, 'voice_ref': 'system:Zira',
+                    'tts_ms': 100, 'audio_url': '/api/tts/1.wav', 'speaker': ''},
+      });
+      final p = ev.payload as TtsReadyPayload;
+      expect(p.audioUrl, '/api/tts/1.wav');
+      expect(p.speaker, isNull);
+    });
+
+    test('metrics: p50_ms.diar 등 단계별 값과 gpu_util_stream 을 읽는다', () {
+      final ev = ServerEvent.fromJson({
+        'v': 1, 'type': 'metrics', 'seq': 5, 'session_id': 's1', 'ts_wall_ms': 1,
+        'payload': {'p50_ms': {'stt': 800, 'mt': 1200, 'tts': 300, 'diar': 40},
+                    'p99_ms': {'stt': 1500, 'mt': 2500, 'tts': 600, 'diar': 90},
+                    'gpu_util_stream': 0.35, 'miss_rate': 0.02, 'queue_depth': 1, 'gpu_mem_used_mb': 12600},
+      });
+      final p = ev.payload as MetricsPayload;
+      expect(p.p50Ms['diar'], 40);
+      expect(p.p99Ms['mt'], 2500);
+      expect(p.gpuUtilStream, closeTo(0.35, 1e-9));
+      expect(p.missRate, closeTo(0.02, 1e-9));
+      expect(p.gpuMemUsedMb, 12600);
+    });
+
+    test('deadline.event: L2/L3 와 late_ms', () {
+      final ev = ServerEvent.fromJson({
+        'v': 1, 'type': 'deadline.event', 'seq': 6, 'session_id': 's1', 'ts_wall_ms': 1,
+        'payload': {'seg_id': 2, 'kind': 'tts', 'level': 'L2', 'late_ms': 1400},
+      });
+      final p = ev.payload as DeadlineEventPayload;
+      expect(p.kind, 'tts');
+      expect(p.level, 'L2');
+      expect(p.lateMs, 1400);
+    });
+  });
+
   test('ClientMessage.control은 명세 형식의 JSON을 만든다', () {
     expect(
       ClientMessage.control('start'),
