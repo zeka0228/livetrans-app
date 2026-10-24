@@ -13,6 +13,7 @@ class TranscriptEntry {
     this.translation,
     this.speaker,
     this.late = false,
+    this.revised = false,
   });
 
   final int segId;
@@ -47,6 +48,9 @@ class TranscriptEntry {
   /// 모드 A 에서 데드라인을 놓쳐 재생에 못 실린 문장 (`deadline.event` L3). 기록에는 "지연" 표시로 남긴다.
   final bool late;
 
+  /// 서버 2차 패스(S-28 `segment.update`/`translation.update`)로 원문 또는 번역이 고쳐진 줄. 목록에 "교정" 배지.
+  final bool revised;
+
   TranscriptEntry copyWith({
     int? tEndMs,
     String? text,
@@ -58,6 +62,8 @@ class TranscriptEntry {
     String? translation,
     String? speaker,
     bool? late,
+    bool? revised,
+    bool clearTranslation = false,
   }) =>
       TranscriptEntry(
         segId: segId,
@@ -69,9 +75,10 @@ class TranscriptEntry {
         isFinal: isFinal ?? this.isFinal,
         sttMs: sttMs ?? this.sttMs,
         forcedCut: forcedCut ?? this.forcedCut,
-        translation: translation ?? this.translation,
+        translation: clearTranslation ? null : (translation ?? this.translation),
         speaker: speaker ?? this.speaker,
         late: late ?? this.late,
+        revised: revised ?? this.revised,
       );
 
   static String formatMs(int ms) {

@@ -12,6 +12,8 @@ import 'transcript_entry.dart';
 ///   같은 키의 final 이 다시 오면 그 자리에서 덮어쓴다 (번역 유지).
 /// - `translation.final` 은 같은 (seg_id, speaker) 기록에 번역문을 붙인다. 원문과 똑같은 번역
 ///   (S-20 ②③ `passthrough`) 은 붙이지 않는다 — 같은 문장을 두 번 보여줄 이유가 없다.
+/// - `segment.update` / `translation.update` (S-28 2차 패스) 는 같은 (seg_id, speaker) 줄의 원문/번역을 `text` 로
+///   교체하고 `revised` 를 켠다. 원문 교정으로 번역이 원문과 같아지면(passthrough) 번역을 지운다.
 /// - `deadline.event` L3 는 그 문장을 "지연" 으로 표시한다 (모드 A).
 /// - `error(recoverable=true)` 는 경고 문구만. 치명적 error 는 컨트롤러가 따로 처리한다.
 class TranscriptSessionState {
@@ -63,6 +65,17 @@ List<TranscriptEntry> _insertByTime(List<TranscriptEntry> list, TranscriptEntry 
     i--;
   }
   return [...list.sublist(0, i), e, ...list.sublist(i)];
+}
+
+TranscriptEntry _applyRevision(TranscriptEntry e, RevisionPayload p) {
+  switch (p.kind) {
+    case RevisionKind.segment:
+      final passthrough = e.translation != null && e.translation!.trim() == p.text.trim();
+      return e.copyWith(text: p.text, revised: true, clearTranslation: passthrough);
+    case RevisionKind.translation:
+      if (p.text.trim() == e.text.trim()) return e.copyWith(revised: true, clearTranslation: true);
+      return e.copyWith(translation: p.text, revised: true);
+  }
 }
 
 TranscriptSessionState reduceTranscript(
@@ -127,6 +140,14 @@ TranscriptSessionState reduceTranscript(
               e.copyWith(translation: p.text)
             else
               e,
+        ],
+      );
+    case RevisionPayload p:
+      if (p.text.trim().isEmpty) return s;
+      return s.copyWith(
+        entries: [
+          for (final e in s.entries)
+            if (e.sameAs(p.segId, p.speaker)) _applyRevision(e, p) else e,
         ],
       );
     case DeadlineEventPayload p when p.level == 'L3':

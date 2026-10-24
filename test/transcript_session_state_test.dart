@@ -161,4 +161,63 @@ void main() {
     expect(s.ended().partials, isEmpty);
     expect(s.ended().warning, 'E_STT_FAILED: x');
   });
+
+  group('2차 패스 갱신 (API 계약 S-28)', () {
+    TranscriptSessionState seed() {
+      var s = const TranscriptSessionState();
+      s = reduceTranscript(s, _ev('segment.final', _final(1, '불레', speaker: 'S0')));
+      s = reduceTranscript(s, _ev('segment.final', _final(1, 'the other one', speaker: 'S1')));
+      s = reduceTranscript(s, _ev('translation.final', {'seg_id': 1, 'text': '다른 거', 'speaker': 'S1'}));
+      return s;
+    }
+
+    test('translation.update 는 같은 (seg_id, speaker) 줄의 번역만 바꾸고 revised 를 켠다', () {
+      var s = seed();
+      s = reduceTranscript(s, _ev('translation.update', {
+        'seg_id': 1, 'speaker': 'S1', 'text': '아니 다른 열쇠 말이야', 'prev_text': '다른 거', 'reason': 'context',
+      }));
+      final s1 = s.entries.singleWhere((e) => e.speaker == 'S1');
+      final s0 = s.entries.singleWhere((e) => e.speaker == 'S0');
+      expect(s1.translation, '아니 다른 열쇠 말이야');
+      expect(s1.revised, isTrue);
+      expect(s0.translation, isNull);
+      expect(s0.revised, isFalse);
+    });
+
+    test('segment.update 는 원문을 바꾸고 번역은 유지한다', () {
+      var s = seed();
+      s = reduceTranscript(s, _ev('segment.update', {
+        'seg_id': 1, 'speaker': 'S0', 'text': '볼래?', 'prev_text': '불레', 'reason': 'context',
+      }));
+      final s0 = s.entries.singleWhere((e) => e.speaker == 'S0');
+      expect(s0.text, '볼래?');
+      expect(s0.revised, isTrue);
+      expect(s.entries.singleWhere((e) => e.speaker == 'S1').translation, '다른 거');
+    });
+
+    test('speaker 없는 update 는 같은 seg_id 전부에, 빈 text 는 무시', () {
+      var s = seed();
+      s = reduceTranscript(s, _ev('translation.update', {'seg_id': 1, 'text': '', 'reason': 'context'}));
+      expect(s.entries.every((e) => !e.revised), isTrue);
+      s = reduceTranscript(s, _ev('segment.update', {'seg_id': 1, 'text': '같이', 'reason': 'context'}));
+      expect(s.entries.every((e) => e.text == '같이' && e.revised), isTrue);
+    });
+
+    test('교정으로 번역이 원문과 같아지면 번역을 지운다 (passthrough 규칙)', () {
+      var s = seed();
+      s = reduceTranscript(s, _ev('translation.update', {'seg_id': 1, 'speaker': 'S1', 'text': 'the other one'}));
+      expect(s.entries.singleWhere((e) => e.speaker == 'S1').translation, isNull);
+      s = seed();
+      s = reduceTranscript(s, _ev('segment.update', {'seg_id': 1, 'speaker': 'S1', 'text': '다른 거'}));
+      final e = s.entries.singleWhere((x) => x.speaker == 'S1');
+      expect(e.text, '다른 거');
+      expect(e.translation, isNull);
+    });
+
+    test('모르는 seg_id 의 update 는 아무것도 바꾸지 않는다', () {
+      final s = seed();
+      final after = reduceTranscript(s, _ev('translation.update', {'seg_id': 99, 'text': 'x'}));
+      expect(after.entries.map((e) => e.translation), s.entries.map((e) => e.translation));
+    });
+  });
 }

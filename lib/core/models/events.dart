@@ -44,6 +44,8 @@ sealed class ServerPayload {
       'segment.partial' => SegmentPartialPayload.fromJson(p),
       'segment.final' => SegmentFinalPayload.fromJson(p),
       'translation.final' => TranslationFinalPayload.fromJson(p),
+      'segment.update' => RevisionPayload.fromJson(RevisionKind.segment, p),
+      'translation.update' => RevisionPayload.fromJson(RevisionKind.translation, p),
       'tts.ready' => TtsReadyPayload.fromJson(p),
       'deadline.event' => DeadlineEventPayload.fromJson(p),
       'metrics' => MetricsPayload.fromJson(p),
@@ -189,6 +191,46 @@ class TranslationFinalPayload extends ServerPayload {
         engine: asString(p['engine']),
         fallback: p['fallback'] == true,
         mtMs: asInt(p['mt_ms']),
+        speaker: asStringOrNull(p['speaker']),
+      );
+}
+
+/// API 계약 S-28 2차 패스 — 뒤 문맥이 온 뒤 서버가 이미 낸 줄을 고쳐 보낸다.
+enum RevisionKind {
+  /// `segment.update`: 원문 줄 교체 (STT 오류 교정).
+  segment,
+
+  /// `translation.update`: 번역 줄 교체.
+  translation,
+}
+
+/// `segment.update` / `translation.update` `{seg_id, speaker?, text, prev_text, reason}` (S-28).
+/// (seg_id, speaker) 키로 기록의 줄을 찾아 [text] 로 바꾼다. 발화당 최대 1회, 달라진 것만 온다.
+class RevisionPayload extends ServerPayload {
+  const RevisionPayload({
+    required this.kind,
+    required this.segId,
+    required this.text,
+    this.prevText,
+    this.reason,
+    this.speaker,
+  });
+
+  final RevisionKind kind;
+  final int segId;
+  final String text;
+  final String? prevText;
+
+  /// 지금은 `context`(앞뒤 문맥) 뿐.
+  final String? reason;
+  final String? speaker;
+
+  factory RevisionPayload.fromJson(RevisionKind kind, Map<String, dynamic> p) => RevisionPayload(
+        kind: kind,
+        segId: asInt(p['seg_id']),
+        text: asString(p['text']),
+        prevText: asStringOrNull(p['prev_text']),
+        reason: asStringOrNull(p['reason']),
         speaker: asStringOrNull(p['speaker']),
       );
 }

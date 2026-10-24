@@ -351,6 +351,8 @@ async def run_mode_bc(ws: WebSocket, sid: str, sess: dict):
             return int(received / BYTES_PER_MS)
         return 0 if started_at is None else int((time.monotonic() - started_at) * 1000)
 
+    pending_revise: list[tuple[float, int, str]] = []  # (due_monotonic, seg_id, text) — S-28 2차 패스 흉내
+
     async def emit_final(text: str):
         nonlocal seg_id, seg_start_ms, finals
         finals += 1
@@ -358,6 +360,9 @@ async def run_mode_bc(ws: WebSocket, sid: str, sess: dict):
             "seg_id": seg_id, "t_start_ms": seg_start_ms, "t_end_ms": t_cap(), "text": text, "lang": lang,
             "lang_prob": 0.99, "words": [], "forced_cut": False, "stt_ms": 12,
         })
+        # 세 문장마다 하나는 1.5 s 뒤 원문을 고쳐 보낸다 (segment.update).
+        if text and finals % 3 == 0:
+            pending_revise.append((time.monotonic() + 1.5, seg_id, f"{text} [교정됨]"))
         seg_id += 1
         seg_start_ms = t_cap()
 
@@ -387,6 +392,11 @@ async def run_mode_bc(ws: WebSocket, sid: str, sess: dict):
         if started_at is None:
             continue
         now = time.monotonic()
+        for item in list(pending_revise):
+            if now >= item[0]:
+                pending_revise.remove(item)
+                await send("segment.update", {"seg_id": item[1], "text": item[2],
+                                              "prev_text": item[2].removesuffix(" [교정됨]"), "reason": "context"})
         if now - last_partial >= 1.0:
             last_partial = now
             await send("segment.partial", {"seg_id": seg_id, "t_start_ms": seg_start_ms, "text": f"(가짜 중간) {t_cap()} ms", "lang": lang})
@@ -440,6 +450,7 @@ async def run_mode_a(ws: WebSocket, sid: str, sess: dict):
     last_final_t = 0
     last_metrics = time.monotonic()
     pending_tr: list[tuple[int, int, str, str | None]] = []  # (due_t_cap, seg_id, text, speaker)
+    pending_up: list[tuple[int, int, str, str, str | None]] = []  # (due_t_cap, seg_id, new, prev, speaker) — S-28
     playing = False
     lost_at = 15_000 if sess.get("isolation") == "device:lost" else None
     miss_rate = 0.0
@@ -495,6 +506,16 @@ async def run_mode_a(ws: WebSocket, sid: str, sess: dict):
                 if sess.get("tts"):
                     await send("tts.ready", {"seg_id": item[1], "duration_ms": 1800, "rate": 1.0,
                                              "voice_ref": "system:auto", "tts_ms": 90})
+                # 둘에 하나는 1.5 s 뒤 번역을 고쳐 보낸다 (translation.update, S-28).
+                if item[1] % 2 == 1:
+                    pending_up.append((t + 1500, item[1], f"{item[2]} (문맥 교정)", item[2], item[3]))
+        for item in list(pending_up):
+            if t >= item[0]:
+                pending_up.remove(item)
+                await send("translation.update", {
+                    "seg_id": item[1], "text": item[2], "prev_text": item[3], "reason": "context",
+                    **({"speaker": item[4]} if item[4] else {}),
+                })
         if time.monotonic() - last_metrics >= 2.0:
             last_metrics = time.monotonic()
             await send("metrics", {
