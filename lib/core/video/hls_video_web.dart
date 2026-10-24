@@ -92,6 +92,7 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
     _video.addEventListener('playing', _onPlaying.toJS);
     _video.addEventListener('waiting', _onWaiting.toJS);
     _video.addEventListener('pause', _onPause.toJS);
+    _video.addEventListener('ended', _onEnded.toJS);
     _load();
   }
 
@@ -120,6 +121,8 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
   void _onPause(web.Event _) {
     if (_status != HlsVideoStatus.error) _emit(HlsVideoStatus.paused);
   }
+
+  void _onEnded(web.Event _) => _emit(HlsVideoStatus.ended);
 
   void _load() {
     if (!_hlsLoaded) {

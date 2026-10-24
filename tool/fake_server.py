@@ -131,6 +131,8 @@ FAKE_ENGINES = {
 FAKE_NO_ENGINES = os.environ.get("FAKE_NO_ENGINES") == "1"
 # 기본과 다른 번역 모델을 고르면 모델 교체처럼 N 초 기다린다 (기본 3 s).
 FAKE_MT_SWAP_S = float(os.environ.get("FAKE_MT_SWAP_S", "3"))
+# FAKE_INPUT_END_S=N 이면 모드 A 재생 시작 N 초 뒤 입력이 정상 종료된 것처럼 E_INPUT_ENDED(recoverable) → stopped (S-31). 0 = 안 함.
+FAKE_INPUT_END_S = float(os.environ.get("FAKE_INPUT_END_S", "0"))
 
 
 @app.get("/api/engines")
@@ -453,6 +455,7 @@ async def run_mode_a(ws: WebSocket, sid: str, sess: dict):
     pending_up: list[tuple[int, int, str, str, str | None]] = []  # (due_t_cap, seg_id, new, prev, speaker) — S-28
     playing = False
     lost_at = 15_000 if sess.get("isolation") == "device:lost" else None
+    input_end_at = int(FAKE_INPUT_END_S * 1000) if FAKE_INPUT_END_S > 0 else None
     miss_rate = 0.0
 
     async def emit_final(end_ms: int, text: str, tr: str, speaker: str | None, late_level: str | None):
@@ -523,6 +526,15 @@ async def run_mode_a(ws: WebSocket, sid: str, sess: dict):
                 "p99_ms": {"sep": 800, "diar": 300, "stt": 1200, "mt": 2500, "tts": 400},
                 "gpu_util_stream": 0.35, "miss_rate": miss_rate, "queue_depth": 1, "gpu_mem_used_mb": 8600,
             })
+        if input_end_at is not None and playing and t >= delay_ms + input_end_at:
+            # 입력 정상 종료 (S-31): 남은 문장 플러시 → E_INPUT_ENDED(recoverable) → stopped → close.
+            await emit_final(t, "(입력 끝 — 마지막 문장) ご視聴ありがとうございました。", "(입력 끝 — 마지막 문장) 시청해 주셔서 감사합니다.", "S0", None)
+            await send("error", {"code": "E_INPUT_ENDED", "message": "입력이 끝났습니다 (end of file)", "recoverable": True})
+            state["state"] = "stopped"
+            await send("session.state", dict(state))
+            sessions.pop(sid, None)
+            await ws.close(code=1000)
+            return
         if lost_at is not None and playing and t >= delay_ms + lost_at:
             await send("error", {"code": "E_ROUTE_LOST", "message": "격리 장치가 분리되었습니다 (device:lost)", "recoverable": False})
             state["state"] = "stopped"

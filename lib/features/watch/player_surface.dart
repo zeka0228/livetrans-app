@@ -21,9 +21,13 @@ class PlayerSurface extends StatefulWidget {
     required this.playing,
     required this.muted,
     required this.volume,
+    this.onEnded,
   });
 
   final String? hlsUrl;
+
+  /// 플레이어가 플레이리스트 끝(ENDLIST)까지 다 틀었을 때. 모드 A "방송 끝 → 남은 지연분 재생" 종료 신호 (S-31).
+  final VoidCallback? onEnded;
 
   /// 소스에 영상이 있다고 기대하는가 (`obs_stream`). false 면 오디오 전용 HLS 로 보고 배경을 덮는다.
   final bool expectVideo;
@@ -97,7 +101,10 @@ class _PlayerSurfaceState extends State<PlayerSurface> {
           playing: true,
           muted: widget.muted,
           volume: widget.volume,
-          onState: (s) => setState(() => _video = s),
+          onState: (s) {
+            setState(() => _video = s);
+            if (s.status == HlsVideoStatus.ended) widget.onEnded?.call();
+          },
         ),
         // 소리만 모드: 오디오는 플레이어가 내고 화면은 배경으로 덮는다.
         if (!widget.expectVideo)
@@ -134,6 +141,7 @@ class _VideoStatusChip extends StatelessWidget {
       HlsVideoStatus.ready => ('영상 준비됨', Icons.check_circle_outline_rounded, Colors.white70),
       HlsVideoStatus.buffering => ('영상 버퍼링…', Icons.hourglass_top_rounded, Colors.white70),
       HlsVideoStatus.paused => ('영상 일시정지', Icons.pause_circle_outline_rounded, Colors.white70),
+      HlsVideoStatus.ended => ('재생 끝', Icons.stop_circle_outlined, Colors.white70),
       HlsVideoStatus.error => ('영상 오류', Icons.error_outline_rounded, Colors.redAccent),
       HlsVideoStatus.unsupported => ('이 플랫폼은 영상 미지원', Icons.videocam_off_outlined, Colors.orangeAccent),
       HlsVideoStatus.playing => ('재생 중', Icons.play_arrow_rounded, Colors.white70),

@@ -132,7 +132,7 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
     });
 
     final playhead = state.clock.playheadMs(_nowMs);
-    final cues = playhead == null || state.phase != WatchPhase.playing
+    final cues = playhead == null || !state.phase.isPlayback
         ? const <TranscriptEntry>[]
         : activeCues(state.entries, playhead);
     final landscape = MediaQuery.of(context).orientation == Orientation.landscape;
@@ -166,9 +166,10 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
                 ? null
                 : ref.read(serverConfigProvider).resolve(state.hlsUrl!),
             expectVideo: state.hasVideo,
-            playing: state.phase == WatchPhase.playing,
+            playing: state.phase.isPlayback,
             muted: state.muted,
             volume: state.originalVolume,
+            onEnded: controller.onHlsEnded,
           ),
           _SubtitleOverlay(
             cues: cues,
@@ -176,6 +177,12 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
             showSpeaker: state.settings.showSpeaker,
             bottomInset: _controlsVisible ? 64 : 16,
           ),
+          if (state.phase == WatchPhase.draining)
+            _InputEndedBanner(
+              remainingS: state.drainRemainingS(_nowMs),
+              top: _controlsVisible ? 56 : 12,
+              onFinish: controller.stop,
+            ),
           if (overlayInVideo) phaseOverlay,
           AnimatedOpacity(
             opacity: _controlsVisible ? 1 : 0,
@@ -504,6 +511,7 @@ class _PhaseOverlay extends StatelessWidget {
     final ring = compact ? 56.0 : 96.0;
     switch (state.phase) {
       case WatchPhase.playing:
+      case WatchPhase.draining:
       case WatchPhase.idle:
         return const SizedBox.shrink();
       case WatchPhase.connecting:
@@ -776,6 +784,7 @@ class _ControlsLayer extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final playhead = state.clock.playheadMs(nowMs);
     final live = state.phase == WatchPhase.playing;
+    final draining = state.phase == WatchPhase.draining;
     final misses = state.deadlines;
 
     return Column(
@@ -794,8 +803,16 @@ class _ControlsLayer extends StatelessWidget {
             children: [
               IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded, color: Colors.white)),
               _StatusChip(
-                color: live ? const Color(0xFFE53935) : (state.phase == WatchPhase.error ? scheme.error : Colors.white24),
-                text: live && state.delayS != null ? 'LIVE −${state.delayS}s' : state.phase.label,
+                color: live
+                    ? const Color(0xFFE53935)
+                    : draining
+                        ? const Color(0xFFB08A00)
+                        : (state.phase == WatchPhase.error ? scheme.error : Colors.white24),
+                text: live && state.delayS != null
+                    ? 'LIVE −${state.delayS}s'
+                    : draining
+                        ? '방송 끝 · 재생 중'
+                        : state.phase.label,
                 pulse: live,
               ),
               const SizedBox(width: 8),
@@ -872,7 +889,7 @@ class _ControlsLayer extends StatelessWidget {
                     icon: Icons.lightbulb_outline_rounded,
                   ),
                 ),
-              if (state.isLive)
+              if (state.isLive || draining)
                 FilledButton.tonalIcon(
                   style: FilledButton.styleFrom(
                     backgroundColor: scheme.error.withValues(alpha: 0.9),
@@ -881,12 +898,67 @@ class _ControlsLayer extends StatelessWidget {
                   ),
                   onPressed: onStop,
                   icon: const Icon(Icons.stop_rounded),
-                  label: const Text('정지'),
+                  label: Text(draining ? '끝내기' : '정지'),
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 방송이 끝난 뒤 남은 지연분을 재생하는 동안의 안내 띠 (S-31). 플레이어·자막은 그대로 보인다.
+class _InputEndedBanner extends StatelessWidget {
+  const _InputEndedBanner({required this.remainingS, required this.top, required this.onFinish});
+
+  final int? remainingS;
+  final double top;
+  final Future<void> Function() onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    final remain = remainingS;
+    return Positioned(
+      top: top,
+      left: 12,
+      right: 12,
+      child: Center(
+        child: Material(
+          key: const Key('input-ended-banner'),
+          color: const Color(0xDD3A2E00),
+          borderRadius: BorderRadius.circular(999),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.flag_circle_rounded, size: 18, color: Color(0xFFFFD54F)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    remain == null || remain <= 0
+                        ? '방송이 끝났습니다 · 남은 지연분을 재생하고 있어요'
+                        : '방송이 끝났습니다 · 남은 지연분 재생 중 (약 $remain초)',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFFFD54F),
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onPressed: onFinish,
+                  child: const Text('지금 끝내기'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -103,6 +103,31 @@ void main() {
     });
   });
 
+  group('입력 정상 종료 뒤 남은 지연분 재생 (API 계약 S-31)', () {
+    test('draining 은 isPlayback 이지만 isLive 는 아니다', () {
+      expect(WatchPhase.draining.isPlayback, isTrue);
+      expect(WatchPhase.playing.isPlayback, isTrue);
+      expect(WatchPhase.draining.isLive, isFalse);
+      expect(WatchPhase.ended.isPlayback, isFalse);
+    });
+
+    test('마감 = 지금 + D 초 + 여유, 남은 초는 0 아래로 내려가지 않는다', () {
+      final until = WatchState.drainDeadline(10_000, 8);
+      expect(until, 10_000 + 8000 + WatchState.drainMarginMs);
+      final st = WatchState(phase: WatchPhase.draining, drainUntilMs: until);
+      expect(st.drainRemainingS(10_000), 10);
+      expect(st.drainRemainingS(until + 5000), 0);
+      expect(const WatchState(phase: WatchPhase.playing, drainUntilMs: 1).drainRemainingS(0), isNull);
+    });
+
+    test('copyWith(clearDrain) 은 inputEnded·drainUntilMs 를 지운다', () {
+      final st = const WatchState().copyWith(inputEnded: true, drainUntilMs: 5);
+      expect(st.inputEnded, isTrue);
+      expect(st.copyWith(clearDrain: true).inputEnded, isFalse);
+      expect(st.copyWith(clearDrain: true).drainUntilMs, isNull);
+    });
+  });
+
   group('WatchState.startBlockReason (API 계약 S-29 ③)', () {
     const supported = RouteCheckState(status: RouteCheckStatus.idle);
 

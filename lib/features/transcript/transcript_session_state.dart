@@ -16,6 +16,7 @@ import 'transcript_entry.dart';
 ///   교체하고 `revised` 를 켠다. 원문 교정으로 번역이 원문과 같아지면(passthrough) 번역을 지운다.
 /// - `deadline.event` L3 는 그 문장을 "지연" 으로 표시한다 (모드 A).
 /// - `error(recoverable=true)` 는 경고 문구만. 치명적 error 는 컨트롤러가 따로 처리한다.
+///   `E_INPUT_ENDED` (S-31, 입력 정상 종료) 는 오류가 아니라 "방송이 끝났습니다" 로 쓴다.
 class TranscriptSessionState {
   const TranscriptSessionState({
     this.partials = const [],
@@ -53,6 +54,12 @@ class TranscriptSessionState {
   TranscriptSessionState ended() =>
       copyWith(partials: const [], clearServerState: true);
 }
+
+/// 복구 가능한 서버 오류의 사용자 문구. `E_INPUT_ENDED` (S-31) 는 정상 종료라 오류처럼 쓰지 않는다.
+String describeRecoverable(ErrorPayload p) => switch (p.code) {
+      'E_INPUT_ENDED' => '방송이 끝났습니다 · 남은 문장을 정리하는 중',
+      _ => '${p.code}: ${p.message}',
+    };
 
 /// partial 끼리 같은 칸인지: 화자가 있으면 화자 레인, 없으면 전부 한 칸.
 bool _sameLane(TranscriptEntry a, String? speaker) =>
@@ -159,7 +166,7 @@ TranscriptSessionState reduceTranscript(
         ],
       );
     case ErrorPayload p when p.recoverable:
-      return s.copyWith(warning: '${p.code}: ${p.message}');
+      return s.copyWith(warning: describeRecoverable(p));
     case ErrorPayload():
     case TtsReadyPayload():
     case DeadlineEventPayload():
