@@ -13,11 +13,13 @@
 ## 실행 (웹, 권장)
 
 ```bat
-toolun_web.bat                              REM 서버 http://127.0.0.1:8765, 앱 http://127.0.0.1:8780
-toolun_web.bat http://127.0.0.1:8766 8782   REM 다른 서버 주소·포트
+tool
+un_web.bat                              REM 서버 http://127.0.0.1:8765, 앱 http://127.0.0.1:8780
+tool
+un_web.bat http://127.0.0.1:8766 8782   REM 다른 서버 주소·포트
 ```
 
-릴리스 빌드(`flutter build web`) → `tool\serve_web.py` 로 정적 서빙 → Chrome 을 별도 프로필 + `--disable-web-security` 로 엽니다 (서버에 CORS 가 아직 없어서). 서버 주소는 `--dart-define=LIVETRANS_SERVER=…` 로 빌드에 박히며 연결 화면에서도 바꿀 수 있습니다. 디버그 `flutter run -d web-server` 는 브라우저를 다시 열면 빈 화면이 나는 경우가 있어 권장하지 않습니다.
+릴리스 빌드(`flutter build web`) → `tool\serve_web.py` 로 정적 서빙 → Chrome 을 별도 프로필로 엽니다 (서버가 `server.cors_origins` 기본값 `http://127.0.0.1:8780` 을 CORS 로 허용하므로 보안 플래그는 필요 없습니다. 다른 포트로 띄우면 서버 설정에 그 출처를 추가하세요). 서버 주소는 `--dart-define=LIVETRANS_SERVER=…` 로 빌드에 박히며 연결 화면에서도 바꿀 수 있습니다. 디버그 `flutter run -d web-server` 는 브라우저를 다시 열면 빈 화면이 나는 경우가 있어 권장하지 않습니다.
 
 다른 플랫폼:
 
@@ -34,7 +36,8 @@ flutter run -d <device>
 REM 서버 저장소의 venv python 으로 (fastapi·uvicorn 필요)
 set FAKE_HLS_DIR=<ffmpeg 로 만든 HLS 폴더>   REM 모드 A 영상까지 보려면 (만드는 법은 toolake_server.py 주석)
 python toolake_server.py 8766
-toolun_web.bat http://127.0.0.1:8766 8782
+tool
+un_web.bat http://127.0.0.1:8766 8782
 ```
 
 HLS 플레이어만 점검하려면 `flutter build web --release -o build\web_hls --dart-define=LIVETRANS_DEMO=hls --dart-define=HLS_URL=<m3u8 주소>` 뒤 같은 방식으로 서빙합니다.

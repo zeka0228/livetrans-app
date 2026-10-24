@@ -1,7 +1,8 @@
 @echo off
 REM Builds the Flutter web app (release), serves it on 127.0.0.1:%PORT%, and opens Chrome.
 REM Usage:  tool\run_web.bat [SERVER_URL=http://127.0.0.1:8765] [PORT=8780]
-REM Chrome runs with --disable-web-security in a separate profile because the server has no CORS yet.
+REM Chrome opens a separate profile (fake mic UI, autoplay). The server allows http://127.0.0.1:8780 via CORS
+REM (server.cors_origins, livetrans-server PR #13); if you change PORT, add that origin on the server side.
 REM Requires: flutter, python 3 on PATH, Google Chrome.
 setlocal
 cd /d "%~dp0.."
@@ -27,8 +28,8 @@ timeout /t 2 /nobreak >nul
 
 if exist "%CHROME%" (
   echo [run_web] opening Chrome
-  start "" "%CHROME%" --user-data-dir="%PROFILE%" --disable-web-security --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream --no-first-run --no-default-browser-check --window-size=520,900 --app=http://127.0.0.1:%PORT%
+  start "" "%CHROME%" --user-data-dir="%PROFILE%" --autoplay-policy=no-user-gesture-required --use-fake-ui-for-media-stream --no-first-run --no-default-browser-check --window-size=520,900 --app=http://127.0.0.1:%PORT%
 ) else (
-  echo [run_web] Chrome not found; open http://127.0.0.1:%PORT% manually with --disable-web-security
+  echo [run_web] Chrome not found; open http://127.0.0.1:%PORT% manually in Chrome
 )
 endlocal

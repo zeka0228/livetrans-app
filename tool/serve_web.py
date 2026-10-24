@@ -2,7 +2,8 @@
 
 - CORS `*`, 캐시 끔 (빌드를 다시 하면 새로고침만으로 반영).
 - `flutter run -d web-server`(디버그) 는 브라우저를 다시 열면 빈 화면이 나는 경우가 있어 시연·검증은 이 방식으로 한다.
-- 서버(livetrans-server)에 CORS 가 없으므로 Chrome 은 tool/run_web.bat 처럼 `--disable-web-security` + 별도 프로필로 연다.
+- 서버(livetrans-server)는 `server.cors_origins`(기본 http://127.0.0.1:8780) 출처를 CORS 로 허용하므로 일반 Chrome 으로 연다.
+  다른 포트로 띄우면 서버 `config/default.local.yaml` 의 `server.cors_origins` 에 그 출처를 추가한다 (API 계약 Q-API-13).
 """
 import sys
 from functools import partial
