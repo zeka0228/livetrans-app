@@ -84,7 +84,10 @@ class _HlsVideoImplState extends State<HlsVideoImpl> {
       ..width = '100%'
       ..height = '100%'
       ..objectFit = 'contain'
-      ..backgroundColor = '#000';
+      ..backgroundColor = '#000'
+      // 플랫폼 뷰(DOM)가 클릭을 삼키면 그 위의 Flutter 탭(컨트롤 다시 보이기)·키보드 포커스가 끊긴다.
+      // 자체 컨트롤을 안 쓰므로 포인터는 전부 Flutter 로 넘긴다.
+      ..pointerEvents = 'none';
     ui_web.platformViewRegistry.registerViewFactory(
       _viewType,
       (int viewId) => _video,

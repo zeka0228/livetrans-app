@@ -31,10 +31,13 @@ import uuid
 import wave
 
 from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketState
 
 app = FastAPI()
+# 앱(별도 출처, 예: http://127.0.0.1:8782)이 REST 를 부를 수 있게 CORS 전부 허용 (실서버는 server.cors_origins, PR #13).
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 SAMPLE_RATE = 16000
 BYTES_PER_MS = SAMPLE_RATE * 2 / 1000
 

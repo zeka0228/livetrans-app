@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/server_config.dart';
+import '../../core/storage/local_flags.dart';
 import '../../core/tts/tts_player.dart';
 import '../transcript/transcript_entry.dart';
 import '../transcript/transcript_list.dart';
@@ -31,11 +32,17 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
   bool _fullscreen = false;
   bool _controlsVisible = true;
   bool _showMetrics = false;
+
+  /// 처음 전체화면에 들어갈 때 한 번만 보여 주는 "Esc 로 해제" 안내. 본 뒤에는 [LocalFlags] 에 남겨 다시 안 띄운다.
+  bool _escHintVisible = false;
+  Timer? _escHintTimer;
+  static const _escHintSeenKey = 'watch.fullscreen_esc_hint_seen';
   int _nowMs = DateTime.now().millisecondsSinceEpoch;
 
   @override
   void initState() {
     super.initState();
+    HardwareKeyboard.instance.addHandler(_onKey);
     // 재생 위치·카운트다운은 서버 이벤트가 아니라 시계로 움직이므로 화면에서 직접 돈다.
     _clock = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (mounted) setState(() => _nowMs = DateTime.now().millisecondsSinceEpoch);
@@ -46,6 +53,8 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
   void dispose() {
     _clock?.cancel();
     _hideControls?.cancel();
+    _escHintTimer?.cancel();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     if (_fullscreen) unawaited(_applyFullscreen(false));
     super.dispose();
   }
@@ -70,6 +79,35 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
     });
     unawaited(_applyFullscreen(_fullscreen));
     _scheduleHide();
+    if (_fullscreen) {
+      _maybeShowEscHint();
+    } else {
+      _dismissEscHint();
+    }
+  }
+
+  /// Esc 키로 전체화면 해제. 웹·데스크톱에는 뒤로 가기 제스처가 없고, 전체화면에서는 컨트롤이 숨어
+  /// 해제 버튼을 찾기 어렵다. 위에 시트·다이얼로그가 떠 있으면 Esc 는 그쪽 몫이라 건드리지 않는다.
+  bool _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape) return false;
+    if (!mounted || !_fullscreen) return false;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    _toggleFullscreen();
+    return true;
+  }
+
+  void _maybeShowEscHint() {
+    if (LocalFlags.get(_escHintSeenKey)) return;
+    LocalFlags.set(_escHintSeenKey, true);
+    setState(() => _escHintVisible = true);
+    _escHintTimer?.cancel();
+    _escHintTimer = Timer(const Duration(seconds: 8), _dismissEscHint);
+  }
+
+  void _dismissEscHint() {
+    _escHintTimer?.cancel();
+    _escHintTimer = null;
+    if (mounted && _escHintVisible) setState(() => _escHintVisible = false);
   }
 
   void _scheduleHide() {
@@ -207,6 +245,7 @@ class _WatchPlayerScreenState extends ConsumerState<WatchPlayerScreen> {
             ),
           ),
           if (_showMetrics) Positioned(top: 56, right: 12, child: _MetricsPanel(state: state)),
+          if (_escHintVisible) _EscHint(onClose: _dismissEscHint),
         ],
       ),
     );
@@ -964,6 +1003,59 @@ class _InputEndedBanner extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 첫 전체화면 안내 팝업: Esc 로 해제. 8 s 뒤 또는 "확인" 으로 사라진다.
+class _EscHint extends StatelessWidget {
+  const _EscHint({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Material(
+        key: const Key('fullscreen-esc-hint'),
+        color: const Color(0xE6162238),
+        borderRadius: BorderRadius.circular(14),
+        elevation: 6,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 12, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.keyboard_rounded, size: 20, color: Color(0xFF90CAF9)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Esc 키를 누르면 전체화면이 해제돼요',
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '화면을 클릭하면 숨겨진 조작 버튼이 다시 나타납니다',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF90CAF9)),
+                  onPressed: onClose,
+                  child: const Text('확인'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
